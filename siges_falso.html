@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>SisGE (SIMULADOR) — Estudiantes del trayecto</title>
+<!--
+  SIMULADOR del SiGeS. NO es el sistema del Ministerio.
+
+  Copia la estructura y los rótulos del formulario real (sacados de las capturas
+  del proceso) para poder desarrollar y mostrar el bot sin entrar al sistema de
+  verdad. Esto es lo que en la industria se llama un "entorno de pruebas", y
+  existe por tres razones:
+
+    1. Se puede equivocar sin consecuencias. Un bot a medio hacer contra el
+       sistema real deja registros basura que después hay que borrar a mano.
+    2. No hace falta usuario ni contraseña de nadie.
+    3. Se puede mostrar en una Expo o en una demo sin exponer datos de personas.
+
+  Cuando el bot anda acá, recién ahí se lo apunta al sistema real.
+-->
+<style>
+  :root { --verde:#00695c; --rojo:#c62828; --gris:#f4f6f8; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:Roboto,Arial,sans-serif; background:#eef1f4; color:#222; }
+  .barra { background:#fff; border-bottom:1px solid #ddd; padding:10px 18px; display:flex;
+           align-items:center; gap:14px; }
+  .barra b { color:var(--verde); font-size:20px; }
+  .aviso { background:#fff3cd; border:1px solid #ffe08a; color:#7a5b00; padding:6px 12px;
+           border-radius:6px; font-size:13px; }
+  .panel { max-width:900px; margin:22px auto; background:#fff; border-radius:8px;
+           box-shadow:0 1px 4px rgba(0,0,0,.12); padding:20px 24px; }
+  h2 { margin:0 0 18px; font-weight:500; font-size:20px; }
+  .seccion { border:1px solid #cfe3e0; border-radius:6px; padding:14px 16px; margin-bottom:14px; }
+  .seccion > legend { color:var(--rojo); font-size:13px; padding:0 6px; }
+  label { display:block; font-size:12px; color:#666; margin-bottom:3px; }
+  input[type=text], input[type=date], select {
+    width:100%; padding:8px 10px; border:none; border-bottom:1px solid #bbb;
+    background:var(--gris); font-size:14px; font-family:inherit; }
+  input:focus, select:focus { outline:none; border-bottom:2px solid var(--verde); }
+  .fila { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:12px; }
+  button { font-family:inherit; font-size:14px; padding:9px 18px; border-radius:4px;
+           border:1px solid var(--verde); background:var(--verde); color:#fff; cursor:pointer; }
+  button.claro { background:#fff; color:var(--verde); }
+  table { width:100%; border-collapse:collapse; margin-top:10px; }
+  th { text-align:left; font-size:12px; color:#666; padding:10px 8px; border-bottom:1px solid #ddd; }
+  td { padding:12px 8px; border-bottom:1px solid #eee; font-size:14px; }
+  .oculto { display:none; }
+  #alerta { position:fixed; inset:0; background:rgba(0,0,0,.45); display:none;
+            align-items:center; justify-content:center; }
+  #alerta > div { background:#fff; border-radius:6px; padding:24px 28px; min-width:280px; }
+  .radios label { display:flex; align-items:center; gap:8px; font-size:14px; color:#222;
+                  margin:6px 0; }
+  .radios input { width:auto; }
+</style>
+</head>
+<body>
+
+<div class="barra">
+  <b>SisGE</b> <span>401 · Ensenada</span>
+  <span class="aviso">⚠️ SIMULADOR — no es el sistema real</span>
+</div>
+
+<!-- ── Pantalla 1: buscar por documento ─────────────────────────────────── -->
+<div class="panel" id="pantalla-buscar">
+  <h2>Estudiantes del trayecto</h2>
+  <p>Trayecto: (1964) Operador De Software De Gestión Administrativo Contable</p>
+  <fieldset class="seccion">
+    <legend>Buscar estudiante</legend>
+    <div class="fila">
+      <div>
+        <label for="tipo-documento">Tipo de documento</label>
+        <select id="tipo-documento"><option>DNI</option><option>Pasaporte</option></select>
+      </div>
+      <div>
+        <label for="numero-documento">Numero de documento</label>
+        <input type="text" id="numero-documento">
+      </div>
+    </div>
+    <button id="buscar-estudiante">🔍 Buscar estudiante</button>
+  </fieldset>
+
+  <h2 style="margin-top:26px">Pre inscriptos</h2>
+  <table>
+    <thead><tr><th>N°</th><th>APELLIDOS</th><th>NOMBRES</th><th>N° DOCUMENTO</th>
+      <th>FECHA DE NACIMIENTO</th></tr></thead>
+    <tbody id="pre-inscriptos"></tbody>
+  </table>
+  <p id="sin-pre" style="color:#888;font-size:14px">Sin estudiantes pre inscriptos</p>
+</div>
+
+<!-- ── Pantalla 2: agregar estudiante ───────────────────────────────────── -->
+<div class="panel oculto" id="pantalla-agregar">
+  <h2>Agregar estudiante</h2>
+
+  <fieldset class="seccion">
+    <legend>Tipo de carga (Obligatorio)</legend>
+    <div class="radios">
+      <label><input type="radio" name="tipo-carga" value="Carga común" checked> Carga común</label>
+      <label><input type="radio" name="tipo-carga" value="Carga Clan"> Carga Clan</label>
+      <label><input type="radio" name="tipo-carga" value="Carga Matrícula indirecta"> Carga Matrícula indirecta</label>
+    </div>
+  </fieldset>
+
+  <fieldset class="seccion">
+    <legend>Documento (Obligatorio)</legend>
+    <p id="documento-texto"></p>
+    <div class="radios">
+      <label><input type="radio" name="estado-dni" value="DNI Físico" checked> DNI Físico</label>
+      <label><input type="radio" name="estado-dni" value="DNI extraviado y en trámite"> DNI extraviado y en trámite</label>
+    </div>
+  </fieldset>
+
+  <fieldset class="seccion">
+    <legend>Apellido/s y nombre/s (Obligatorio)</legend>
+    <div class="fila">
+      <div><label for="apellidos">Apellido/s *</label><input type="text" id="apellidos"></div>
+      <div><label for="nombres">Nombres</label><input type="text" id="nombres"></div>
+    </div>
+  </fieldset>
+
+  <fieldset class="seccion">
+    <legend>Sexo según DNI (Obligatorio)</legend>
+    <div class="radios">
+      <label><input type="radio" name="sexo" value="Femenino"> Femenino</label>
+      <label><input type="radio" name="sexo" value="Masculino"> Masculino</label>
+      <label><input type="radio" name="sexo" value="X"> X</label>
+    </div>
+  </fieldset>
+
+  <fieldset class="seccion">
+    <legend>Identidad de género (Obligatorio)</legend>
+    <label for="identidad-genero">Identidad de genero *</label>
+    <select id="identidad-genero">
+      <option value="">—</option><option>Mujer</option><option>Varón</option><option>Otro</option>
+    </select>
+  </fieldset>
+
+  <fieldset class="seccion">
+    <legend>Nacionalidad y nacimiento (Obligatorio)</legend>
+    <div class="fila">
+      <div><label for="nacionalidad">Nacionalidad</label><input type="text" id="nacionalidad"></div>
+      <div><label for="lugar-nacimiento">Lugar de nacimiento</label><input type="text" id="lugar-nacimiento"></div>
+    </div>
+    <label for="fecha-nacimiento">Fecha de nacimiento *</label>
+    <input type="text" id="fecha-nacimiento" placeholder="d/m/aaaa">
+  </fieldset>
+
+  <fieldset class="seccion">
+    <legend>Dirección (Obligatorio)</legend>
+    <div class="fila">
+      <div><label for="calle">Calle</label><input type="text" id="calle"></div>
+      <div><label for="altura">Altura</label><input type="text" id="altura"></div>
+    </div>
+    <div class="fila">
+      <div><label for="distrito">Distrito</label><input type="text" id="distrito"></div>
+      <div><label for="localidad">Localidad</label><input type="text" id="localidad"></div>
+    </div>
+  </fieldset>
+
+  <fieldset class="seccion">
+    <legend>Datos de contacto (Obligatorio)</legend>
+    <label for="celular">Celular</label><input type="text" id="celular">
+  </fieldset>
+
+  <div style="display:flex; gap:10px; margin-bottom:25px">
+    <button id="guardar">Guardar estudiante</button>
+    <button class="claro" id="cancelar">Cancelar</button>
+  </div>
+</div>
+
+<div id="alerta">
+  <div>
+    <h3 style="margin:0 0 10px">Alerta</h3>
+    <p id="alerta-texto"></p>
+    <button id="entendido">Entendido</button>
+  </div>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  let n = 0;
+
+  $('buscar-estudiante').addEventListener('click', () => {
+    const dni = $('numero-documento').value.trim();
+    if (!dni) { mostrarAlerta('Ingrese un número de documento.'); return; }
+    $('documento-texto').textContent = 'DNI ' + dni;
+    $('pantalla-buscar').classList.add('oculto');
+    $('pantalla-agregar').classList.remove('oculto');
+  });
+
+  $('cancelar').addEventListener('click', volver);
+
+  $('guardar').addEventListener('click', () => {
+    // Mismas validaciones que el real: sin estos campos no deja guardar.
+    const faltan = [];
+    if (!$('apellidos').value.trim()) faltan.push('Apellido/s');
+    if (!$('fecha-nacimiento').value.trim()) faltan.push('Fecha de nacimiento');
+    if (!document.querySelector('input[name=sexo]:checked')) faltan.push('Sexo según DNI');
+    if (faltan.length) { mostrarAlerta('Faltan campos obligatorios: ' + faltan.join(', ')); return; }
+
+    n++;
+    const fila = document.createElement('tr');
+    [n, $('apellidos').value, $('nombres').value,
+     $('documento-texto').textContent.replace('DNI ', ''), $('fecha-nacimiento').value]
+      .forEach((v) => { const td = document.createElement('td'); td.textContent = v; fila.appendChild(td); });
+    $('pre-inscriptos').appendChild(fila);
+    $('sin-pre').classList.add('oculto');
+    mostrarAlerta('Estudiante asignado correctamente.');
+    volver();
+  });
+
+  function volver() {
+    $('pantalla-agregar').classList.add('oculto');
+    $('pantalla-buscar').classList.remove('oculto');
+    ['apellidos','nombres','nacionalidad','lugar-nacimiento','fecha-nacimiento',
+     'calle','altura','distrito','localidad','celular','numero-documento']
+      .forEach((id) => $(id).value = '');
+    document.querySelectorAll('input[name=sexo]').forEach((r) => r.checked = false);
+    $('identidad-genero').value = '';
+  }
+
+  function mostrarAlerta(texto) {
+    $('alerta-texto').textContent = texto;
+    $('alerta').style.display = 'flex';
+  }
+  $('entendido').addEventListener('click', () => { $('alerta').style.display = 'none'; });
+</script>
+</body>
+</html>

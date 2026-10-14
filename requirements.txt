@@ -1,0 +1,15 @@
+# Dependencias del bot de carga al SiGeS.
+#
+#     pip install -r requirements.txt
+#     python -m playwright install chromium
+#
+# El segundo comando NO es opcional: `pip install playwright` trae la librería
+# de Python, pero el navegador que maneja se descarga aparte. Sin él, el bot
+# arranca y muere con "Executable doesn't exist".
+#
+# normalizar.py no necesita nada: es toda librería estándar (csv, re,
+# unicodedata, datetime). Se puede correr solo, sin Playwright, para ver qué
+# filas pasan el control antes de tocar un navegador.
+playwright==1.62.0
+# Para leer la planilla de Google bajada como Excel: es lo que ve el amarillo.
+openpyxl==3.1.5

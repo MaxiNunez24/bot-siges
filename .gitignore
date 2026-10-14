@@ -1,0 +1,3 @@
+# Planillas reales: tienen DNI y datos de personas, y este repo es público.
+*.xlsx
+datos_reales*

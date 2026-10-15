@@ -11,8 +11,39 @@ está pensado y por qué: [COMO-FUNCIONA.md](COMO-FUNCIONA.md).
 
 ## Para la preceptoría: la aplicación
 
-Se recibe `Bot-SiGeS.zip`. Se descomprime en cualquier carpeta y se abre **`Bot-SiGeS.exe`**. No
-hace falta instalar nada: usa Microsoft Edge, que viene con Windows.
+### Instalarla (una sola vez)
+
+Hace falta una compu con **Windows 10 u 11** y **Microsoft Edge** (viene con Windows). No se
+instala Python ni ningún otro programa.
+
+1. **Conseguir el archivo `Bot-SiGeS.zip`.** Te lo pasa el docente (por pendrive, Drive o mail).
+   Guardalo, por ejemplo, en **Descargas**.
+2. **Descomprimirlo.** Clic derecho sobre `Bot-SiGeS.zip` → **Extraer todo…** → en "Los archivos
+   se extraerán en esta carpeta", elegí **Documentos** → **Extraer**. Queda la carpeta
+   `Documentos\Bot-SiGeS`.
+   > ⚠️ No lo abras con doble clic desde adentro del .zip: Windows deja ver el .exe, pero no
+   > arranca porque le faltan los archivos que lo acompañan. Siempre **Extraer todo** primero.
+3. **Abrir `Bot-SiGeS.exe`**, dentro de esa carpeta. La primera vez Windows puede mostrar
+   **"Windows protegió su PC"**, porque el programa no está firmado por una empresa: tocá
+   **Más información** → **Ejecutar de todas formas**. No vuelve a preguntar.
+4. **Dejar un acceso directo en el escritorio** (opcional). Clic derecho sobre `Bot-SiGeS.exe` →
+   **Mostrar más opciones** → **Enviar a** → **Escritorio (crear acceso directo)**. Copiar el .exe
+   solo al escritorio no sirve: tiene que quedarse en su carpeta.
+5. **Comprobar que anda en esta compu**, sin tocar el SiGeS real:
+   1. Abrí la carpeta `Bot-SiGeS`, hacé clic en la barra de dirección (arriba, donde dice la
+      ruta), escribí `cmd` y apretá Enter. Se abre una ventana negra en esa carpeta.
+   2. Escribí `Bot-SiGeS.exe --autoprueba` y apretá Enter.
+   3. Esperá medio minuto: aparece la carpeta **`resultados`** con un archivo `carga-….csv`. Si
+      está, todo anda. Ese archivo es de datos inventados: se puede borrar.
+
+**Actualizar a una versión nueva:** guardá aparte `configuracion.json` (tus opciones), borrá la
+carpeta `Bot-SiGeS` vieja, descomprimí la nueva igual que en el paso 2 y volvé a poner
+`configuracion.json` adentro.
+
+**Desinstalar:** borrar la carpeta `Bot-SiGeS`. No deja nada en otro lugar de la compu. La carpeta
+`resultados` tiene DNI y nombres: no la compartas.
+
+### Usarla
 
 La ventana tiene cuatro pestañas, en orden:
 
@@ -44,16 +75,10 @@ Para practicar sin tocar el sistema real: en Opciones, **Ensayo con el simulador
 
 ### Si el .exe no abre
 
-Algunos antivirus frenan los programas armados con Python. Plan B: con Python instalado, doble clic
-en **`abrir_bot.bat`** (la primera vez instala lo necesario). Es la misma ventana.
-
-Para saber si el .exe anda en una compu, sin tocar nada real:
-
-```
-Bot-SiGeS.exe --autoprueba
-```
-
-Carga los datos inventados en el simulador, sin mostrar nada, y deja el resumen en `resultados/`.
+Algunos antivirus frenan los programas armados con Python (lo mandan a cuarentena o lo borran). Si
+pasa, avisale al docente. Plan B: con Python instalado (https://www.python.org, tildando **Add
+python.exe to PATH**), bajar este repositorio y hacer doble clic en **`abrir_bot.bat`**: la primera
+vez instala lo necesario, y abre la misma ventana.
 
 ## Lo que el bot NO hace, a propósito
 

@@ -16,8 +16,10 @@ está pensado y por qué: [COMO-FUNCIONA.md](COMO-FUNCIONA.md).
 Hace falta una compu con **Windows 10 u 11** y **Microsoft Edge** (viene con Windows). No se
 instala Python ni ningún otro programa.
 
-1. **Conseguir el archivo `Bot-SiGeS.zip`.** Te lo pasa el docente (por pendrive, Drive o mail).
-   Guardalo, por ejemplo, en **Descargas**.
+1. **Bajar el archivo `Bot-SiGeS.zip`:**
+   **[⬇️ Descargar Bot-SiGeS.zip](https://github.com/MaxiNunez24/bot-siges/releases/latest/download/Bot-SiGeS.zip)**
+   (siempre baja la última versión). Queda en **Descargas**. Si el navegador avisa que "no se
+   descarga habitualmente", elegí **Conservar**.
 2. **Descomprimirlo.** Clic derecho sobre `Bot-SiGeS.zip` → **Extraer todo…** → en "Los archivos
    se extraerán en esta carpeta", elegí **Documentos** → **Extraer**. Queda la carpeta
    `Documentos\Bot-SiGeS`.

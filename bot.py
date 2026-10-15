@@ -22,8 +22,6 @@ Las tres reglas que este bot no rompe
    real hay que pedirlo explícitamente con --real.
 2. **Nunca inicia sesión solo.** No hay usuario ni contraseña en el código, ni
    los pide. La persona se loguea a mano y recién ahí el bot toma el control.
-   Contra el sistema real, además, es la persona la que busca el DNI y abre el
-   formulario: el bot completa uno que ya está en pantalla.
 3. **Nunca aprieta "Generar matrícula inicial".** El bot deja a la persona como
    PRE INSCRIPTA, que es un estado reversible: si algo salió mal, se borra con
    el tachito. La matrícula la genera una persona, mirando.
@@ -50,7 +48,7 @@ from playwright.sync_api import sync_playwright
 
 import normalizar
 import planilla_google
-import siges_real
+import motor
 
 # Windows a veces abre la consola en cp1252, que no sabe escribir ✅ ni ⛔, y el
 # programa se cae con UnicodeEncodeError a mitad de una carga. Que un emoji se
@@ -154,64 +152,45 @@ def main():
         print('No hay nadie para cargar. Fin.')
         return
 
-    destino = args.real or SIMULADOR
-
     if args.real:
         # Freno a mano. Cargar en el sistema del Ministerio no puede pasar por
         # accidente ni por tener una terminal abierta de ayer.
         print('\n' + '=' * 62)
         print('  ⚠️  ESTO VA CONTRA EL SISTEMA REAL DEL MINISTERIO')
         print('=' * 62)
-        print(f'  Destino : {destino}')
+        print(f'  Destino : {args.real}')
         print(f'  Personas: {len(listos)}')
         print('\n  Cómo es contra el sistema real:')
         print('   · Iniciá sesión vos en el navegador que se va a abrir.')
-        print('   · De cada persona, vos buscás el DNI y abrís "Agregar estudiante".')
-        print('   · El bot completa lo que sabe y para. NO guarda.')
-        print('   · Dirección, Vivienda y Contacto los completás vos: no están relevados.')
-        print('   · Salud, discapacidad y restricción judicial el bot NO los toca nunca.')
-        print('   · Guardás vos, y la matrícula la genera una persona: quedan pre inscriptos.')
+        print('   · El bot busca cada DNI, abre "Agregar estudiante", completa y para.')
+        print('   · Lo marcado en amarillo lo completás vos. "Guardar estudiante" y la')
+        print('     encuesta, también vos. Salud, discapacidad y restricción judicial')
+        print('     el bot NO los toca nunca. La matrícula la genera una persona.')
         if input('\n  Escribí CARGAR para continuar: ').strip() != 'CARGAR':
             print('  Cancelado. No se tocó nada.')
             return
+        # El mismo motor que usa la aplicación de ventanas (app.py), con las
+        # opciones que se guardaron ahí (configuracion.json).
+        ajustes = motor.cargar_ajustes()
+        ajustes.update(url=args.real, simulador=False, demo=False, lento=args.lento)
+        motor.correr(listos, ajustes, Consola())
+        return
 
     with sync_playwright() as p:
         navegador = p.chromium.launch(headless=args.sin_ventana)
         page = navegador.new_page()
-        page.goto(destino)
-
-        if args.real:
-            input('\n  Iniciá sesión y navegá hasta el trayecto. '
-                  'Cuando esté listo, apretá Enter acá... ')
-
-        print(f'\n{"=" * 62}\nCargando {len(listos)} persona(s) en '
-              f'{"el SiGeS REAL" if args.real else "el simulador"}\n{"=" * 62}')
+        page.goto(SIMULADOR)
+        print(f'\n{"=" * 62}\nCargando {len(listos)} persona(s) en el simulador\n{"=" * 62}')
 
         bien, mal = 0, []
         for i, datos in listos:
             quien = f'{datos["apellidos"]}, {datos["nombres"]}'
-            if args.real:
-                # Contra el sistema real, cada persona empieza con una mano
-                # humana: buscar el DNI y abrir "Agregar estudiante". El bot
-                # completa un formulario que ya está en pantalla.
-                print(f'\n  fila {i:>3}  {quien}  (DNI {datos["dni"]})')
-                input('    Buscá ese DNI, abrí "Agregar estudiante" y apretá Enter... ')
-                print(f'    completando…', end=' ', flush=True)
-            else:
-                print(f'  fila {i:>3}  {quien:<38}', end=' ', flush=True)
+            print(f'  fila {i:>3}  {quien:<38}', end=' ', flush=True)
             try:
-                if args.real:
-                    pausa = (lambda: time.sleep(0.35)) if args.lento else (lambda: None)
-                    ok, detalle = siges_real.completar(page, datos, pausa)
-                else:
-                    ok, detalle = cargar_una(page, datos, lento=0.35 if args.lento else 0)
+                ok, detalle = cargar_una(page, datos, lento=0.35 if args.lento else 0)
             except Exception as e:                      # noqa: BLE001
                 ok, detalle = False, f'{type(e).__name__}: {e}'
-            if ok and args.real:
-                bien += 1
-                print(f'✅ {detalle}')
-                input('    Revisá, completá eso y apretá "Guardar estudiante" vos. Enter para seguir... ')
-            elif ok:
+            if ok:
                 bien += 1
                 print('✅')
             else:
@@ -219,8 +198,7 @@ def main():
                 print(f'⛔ {detalle}')
 
         print(f'\n{"=" * 62}')
-        etiqueta = 'Completados' if args.real else 'Cargados'
-        print(f'  {etiqueta}: {bien}    Con problema: {len(mal)}')
+        print(f'  Cargados: {bien}    Con problema: {len(mal)}')
         for quien, detalle in mal:
             print(f'   · {quien}: {detalle}')
         print('=' * 62)
@@ -228,6 +206,23 @@ def main():
         if not args.sin_ventana:
             input('\nEnter para cerrar el navegador... ')
         navegador.close()
+
+
+class Consola:
+    """El `ui` del motor, en la terminal: lo que la ventana muestra con botones,
+    acá es un print y un Enter."""
+
+    def contar(self, texto, tipo='info'):
+        print(texto)
+
+    def progreso(self, hechos, total, quien):
+        pass
+
+    def esperar(self, mensaje, boton):
+        input(f'\n  {mensaje}\n  [{boton}: Enter] ')
+
+    def preguntar(self, pregunta):
+        return input(f'  {pregunta} (s/n) ').strip().lower().startswith('s')
 
 
 if __name__ == '__main__':

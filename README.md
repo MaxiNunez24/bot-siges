@@ -9,68 +9,101 @@ está pensado y por qué: [COMO-FUNCIONA.md](COMO-FUNCIONA.md).
 
 ---
 
-## Instalarlo (una sola vez)
+## Para la preceptoría: la aplicación
 
-Hace falta tener **Python** y **Git**. En una terminal (PowerShell):
+Se recibe `Bot-SiGeS.zip`. Se descomprime en cualquier carpeta y se abre **`Bot-SiGeS.exe`**. No
+hace falta instalar nada: usa Microsoft Edge, que viene con Windows.
+
+La ventana tiene cuatro pestañas, en orden:
+
+1. **Cómo se usa**: el tutorial.
+2. **Planilla**: se elige la planilla bajada de Google (**Archivo → Descargar → Microsoft Excel
+   (.xlsx)**). Aparecen todos los inscriptos con una casilla:
+   - las filas **pintadas de amarillo** vienen destildadas (se pueden tildar a mano);
+   - las que tienen un **problema en los datos** aparecen en rojo con el motivo, y no se pueden
+     tildar: hay que corregir la planilla y volver a importarla;
+   - se puede filtrar por fecha de inscripción.
+3. **Opciones**: la dirección del SiGeS, el **modo demo** (después de cada persona pregunta si
+   quedó bien cargada), y los **valores fijos** para lo que la planilla todavía no pregunta
+   (transporte, WhatsApp, vivienda). Distrito y Localidad: Ensenada. Se guarda en
+   `configuracion.json`, al lado del programa.
+4. **Cargar**: se abre el navegador, **iniciás sesión vos** y abrís el listado del trayecto. Desde
+   ahí el bot, por cada persona, toca **+**, busca el DNI, completa, y espera a que revises,
+   apretes "Guardar estudiante" y hagas la encuesta.
+
+Al terminar deja un resumen en `resultados/carga-AAAA-MM-DD_HH-MM.csv`: a quién completó, qué quedó
+pendiente, qué se cargó con valores fijos y, en modo demo, si se marcó como bien cargado.
+
+> **Valores fijos (provisorio).** Transporte, WhatsApp y Vivienda no están en el formulario de
+> inscripción. Hasta que estén, con la casilla tildada el bot los completa siempre con los mismos
+> valores (los que se eligen en Opciones), y lo anota en el resumen. Destildada, los deja marcados
+> en amarillo para completarlos a mano. **Educación** sale de la planilla (una columna por nivel:
+> completo, incompleto o cursando); solo si no viene se usan los valores fijos.
+
+Para practicar sin tocar el sistema real: en Opciones, **Ensayo con el simulador**.
+
+### Si el .exe no abre
+
+Algunos antivirus frenan los programas armados con Python. Plan B: con Python instalado, doble clic
+en **`abrir_bot.bat`** (la primera vez instala lo necesario). Es la misma ventana.
+
+Para saber si el .exe anda en una compu, sin tocar nada real:
 
 ```
-git clone https://github.com/MaxiNunez24/bot-siges.git
-cd bot-siges
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-python -m playwright install chromium
+Bot-SiGeS.exe --autoprueba
 ```
 
-## Usarlo
-
-**1. Bajar la planilla.** En Google Sheets: **Archivo → Descargar → Microsoft Excel (.xlsx)**, y
-guardarla en la carpeta `bot-siges`. Tiene que ser .xlsx porque un CSV no guarda los colores.
-
-**2. Abrir la terminal en la carpeta y activar el entorno:**
-
-```
-cd bot-siges
-.venv\Scripts\activate
-```
-
-**3. Revisar, sin abrir el navegador.** Muestra a quién cargaría y a quién no, y por qué:
-
-```
-python planilla_google.py "planilla.xlsx" --desde 01/07/2026 --hasta 31/07/2026
-```
-
-**4. Si la lista está bien, cargar:**
-
-```
-python bot.py "planilla.xlsx" --desde 01/07/2026 --hasta 31/07/2026 --real "https://sisge.abc.gob.ar/"
-```
-
-Con la planilla, el bot hace esto:
-
-- **Saltea las filas pintadas de amarillo**, con cualquier tono de amarillo, aunque esté pintada una sola celda.
-- **Filtra por fechas** con `--desde` y `--hasta`, según la columna **FECHA INSCRIPCIÓN**. Si esa
-  columna no está, usa la Marca temporal.
-- Avisa cuando la FECHA INSCRIPCIÓN no coincide con el día en que respondieron, porque suele ser
-  un error de tipeo.
+Carga los datos inventados en el simulador, sin mostrar nada, y deja el resumen en `resultados/`.
 
 ## Lo que el bot NO hace, a propósito
 
 1. **No inicia sesión.** La sesión la abre una persona; el bot no tiene ni pide contraseñas.
-2. **No busca el DNI ni guarda.** De cada persona, vos buscás el DNI y abrís "Agregar
-   estudiante"; el bot completa lo que sabe y espera. Revisás y apretás "Guardar estudiante" vos.
-3. **No toca salud, discapacidad ni restricción judicial**, ni Dirección, Vivienda o Contacto
-   (esos sub-formularios todavía no están relevados).
-4. **Nunca genera la matrícula inicial.** Quedan como pre inscriptos.
+2. **No guarda, no contesta la encuesta, y nunca genera la matrícula inicial.** Completa, para y
+   espera. Quedan como pre inscriptos.
+3. **No pisa a nadie.** Si el DNI ya tenía datos cargados, no toca nada y avisa qué difiere.
+4. **No toca salud, discapacidad, restricción judicial, redes ni programas sociales.**
+5. **No elige "algo parecido".** Si un menú o un buscador no tiene exactamente la opción, la deja
+   marcada para que la elijas vos.
 
-## Para practicar sin tocar el sistema real
+---
+
+## Para el docente
+
+### Armar el .exe
 
 ```
-python bot.py --lento
+armar_exe.bat
 ```
 
-Carga los datos inventados de `datos_ejemplo.csv` en `siges_falso.html`, una copia del
-formulario.
+Deja `dist\Bot-SiGeS\Bot-SiGeS.exe` y `Bot-SiGeS.zip` (el que se pasa). Es una carpeta y no un solo
+.exe a propósito: arranca más rápido y los antivirus la frenan menos.
 
-> ⚠️ Las planillas `.xlsx` están en el `.gitignore`: tienen datos personales y **no se suben** a
-> este repositorio.
+### Desde la terminal
+
+```
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+
+python app.py                                   # la ventana
+python planilla_google.py "planilla.xlsx"       # revisar, sin navegador
+python bot.py --lento                           # el simulador, con los datos de ejemplo
+python bot.py "planilla.xlsx" --desde 01/10/2026 --real "https://sisge.abc.gob.ar/"
+python probar_selectores.py                     # los selectores contra las pantallas guardadas
+```
+
+`probar_selectores.py` necesita las pantallas del SiGeS real guardadas en
+`capturas/siges-2026-10-15/` (fuera de Git: tienen datos de personas).
+
+| Archivo | Qué hace |
+|---|---|
+| `app.py` | La ventana (tkinter). Corre el motor en otro hilo |
+| `motor.py` | Maneja el navegador, persona por persona, y escribe el resumen |
+| `siges_real.py` | El formulario real: qué toca, en qué orden, y qué no toca nunca |
+| `planilla_google.py` | Lee el .xlsx (o .csv): columnas, filas amarillas, fechas |
+| `normalizar.py` | Limpia los datos y frena lo que no se puede cargar con certeza |
+| `bot.py` | La versión de terminal, y el simulador de la clase |
+| `mapa_siges.md` | Cómo es el SiGeS por dentro, pantalla por pantalla |
+
+> ⚠️ Las planillas `.xlsx`, las capturas, los resultados y `configuracion.json` están en el
+> `.gitignore`: tienen datos personales y **no se suben** a este repositorio.

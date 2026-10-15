@@ -53,6 +53,12 @@ COLUMNAS = [
     ('localidad', 'localidad'),
     ('celular', 'celular'),
     ('telefono', 'celular'),
+    # Educación: una columna por nivel, con "completo" / "incompleto" / "cursando"
+    # (de cualquier forma escrita: ver normalizar.interpretar_educacion).
+    ('primari', 'edu_primario'),
+    ('secundari', 'edu_secundario'),
+    ('terciari', 'edu_terciario'),
+    ('universitari', 'edu_universitario'),
 ]
 
 # Lo mínimo para que normalizar.py pueda trabajar.
@@ -225,6 +231,58 @@ def leer(ruta, desde=None, hasta=None, hoja=None, columna_fecha=None,
         print(f'➡️  Pasan al control de datos: {len(elegidas)}')
 
     return elegidas
+
+
+def todas(ruta, hoja=None):
+    """Para la aplicación: TODAS las filas, sin descartar ninguna.
+
+    La que decide es la preceptora, con las casillas del listado: acá solo se
+    marca cada fila con lo que sirve para decidir. Sirve para .xlsx y .csv.
+
+    Devuelve (columnas, filas, faltan):
+      columnas: [(encabezado, clave o None)], para mostrar qué se reconoció;
+      filas: diccionarios para normalizar.py, más '_fila' (el número en la
+             planilla), '_amarilla' y '_fecha' (la de inscripción o la marca
+             temporal, para filtrar por fecha);
+      faltan: las columnas obligatorias que no aparecieron.
+    """
+    if ruta.lower().endswith('.csv'):
+        import csv
+        with open(ruta, encoding='utf-8-sig', newline='') as f:
+            lector = csv.reader(f)
+            encabezados = next(lector, [])
+            crudas = [(n, [(v, False) for v in celdas]) for n, celdas in enumerate(lector, start=2)]
+    else:
+        try:
+            import openpyxl
+        except ImportError:
+            raise RuntimeError('Falta openpyxl para leer .xlsx')
+        libro = openpyxl.load_workbook(ruta, data_only=True)
+        ws = libro[hoja] if hoja else libro.worksheets[0]
+        filas_hoja = ws.iter_rows()
+        encabezados = [c.value for c in next(filas_hoja, [])]
+        crudas = [(celdas[0].row, [(c.value, es_amarillo(c)) for c in celdas]) for celdas in filas_hoja]
+
+    columnas = {}
+    for i, enc in enumerate(encabezados):
+        clave = clave_de(enc, set(columnas.values()))
+        if clave:
+            columnas[i] = clave
+    faltan = [c for c in OBLIGATORIAS if c not in columnas.values()]
+    fecha_de = 'fecha_inscripcion' if 'fecha_inscripcion' in columnas.values() else 'marca_temporal'
+    i_fecha = next((i for i, c in columnas.items() if c == fecha_de), None)
+
+    filas = []
+    for numero, celdas in crudas:
+        if all(v in (None, '') for v, _ in celdas):
+            continue
+        fila = {clave: como_texto(celdas[i][0]) if i < len(celdas) else ''
+                for i, clave in columnas.items()}
+        fila['_fila'] = numero
+        fila['_amarilla'] = any(amarilla for _, amarilla in celdas)
+        fila['_fecha'] = a_fecha(celdas[i_fecha][0]) if i_fecha is not None and i_fecha < len(celdas) else None
+        filas.append(fila)
+    return [(str(e), columnas.get(i)) for i, e in enumerate(encabezados) if e], filas, faltan
 
 
 def main():

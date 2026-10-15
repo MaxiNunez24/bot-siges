@@ -3,9 +3,10 @@
 #     pip install -r requirements.txt
 #     python -m playwright install chromium
 #
-# El segundo comando NO es opcional: `pip install playwright` trae la librería
-# de Python, pero el navegador que maneja se descarga aparte. Sin él, el bot
-# arranca y muere con "Executable doesn't exist".
+# La aplicación (app.py y el .exe) usa Microsoft Edge, que viene con Windows, y
+# no necesita el segundo comando. `bot.py` sí: `pip install playwright` trae la
+# librería de Python, pero su Chromium se descarga aparte. Sin él, arranca y
+# muere con "Executable doesn't exist".
 #
 # normalizar.py no necesita nada: es toda librería estándar (csv, re,
 # unicodedata, datetime). Se puede correr solo, sin Playwright, para ver qué

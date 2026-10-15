@@ -164,6 +164,36 @@ def partir_direccion(domicilio):
 
 SEXO_POR_GENERO = {'mujer': 'Femenino', 'varon': 'Masculino'}
 
+# Los niveles, de menor a mayor, con la clave de su columna en la planilla y su
+# nombre en el menú del SiGeS.
+NIVELES = [('edu_primario', 'Primario'), ('edu_secundario', 'Secundario'),
+           ('edu_terciario', 'Terciario'), ('edu_universitario', 'Universitario')]
+
+
+def interpretar_educacion(fila):
+    """El nivel más alto que la persona marcó, y en qué estado.
+
+    La planilla tiene una columna por nivel, y en cada una "completo",
+    "incompleto" o "cursando" (escrito de cualquier forma: Completado, COMPLETO,
+    En curso…). Devuelve {'nivel', 'completo', 'cursando'}, o None si no hay
+    nada: entonces Educación queda para la preceptora (o los valores fijos).
+    """
+    mejor = None
+    for clave, nombre in NIVELES:
+        v = sin_acentos(limpiar(str(fila.get(clave, '') or ''))).lower()
+        if not v:
+            continue
+        if 'curs' in v:
+            estado = {'completo': False, 'cursando': True}
+        elif 'incomplet' in v or v in ('no', 'no termino'):
+            estado = {'completo': False, 'cursando': False}
+        elif 'complet' in v or 'termin' in v or v in ('si',):
+            estado = {'completo': True, 'cursando': False}
+        else:
+            continue
+        mejor = {'nivel': nombre, **estado}   # los niveles van de menor a mayor: gana el último
+    return mejor
+
 
 def normalizar_fila(fila):
     """Devuelve (datos_limpios, lista_de_problemas)."""
@@ -198,6 +228,7 @@ def normalizar_fila(fila):
         'localidad': titulo(fila.get('localidad', '')),
         'distrito': titulo(fila.get('localidad', '')),
         'celular': revisar(normalizar_celular(fila.get('celular', ''))),
+        'educacion': interpretar_educacion(fila),
     }
 
     if not datos['apellidos']:

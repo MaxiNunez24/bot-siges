@@ -1,3 +1,16 @@
 # Planillas reales: tienen DNI y datos de personas, y este repo es público.
 *.xlsx
 datos_reales*
+
+# Las pantallas guardadas del SiGeS real y lo que deja cada carga: datos de personas.
+capturas/
+resultados/
+configuracion.json
+
+# El entorno y lo que arma PyInstaller.
+.venv/
+__pycache__/
+build/
+dist/
+*.spec
+*.zip

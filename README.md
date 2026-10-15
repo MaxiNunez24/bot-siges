@@ -13,10 +13,11 @@ está pensado y por qué: [COMO-FUNCIONA.md](COMO-FUNCIONA.md).
 
 ### Instalarla (una sola vez)
 
-Hace falta una compu con **Windows 10 u 11** y **Microsoft Edge** (viene con Windows). No se
-instala Python ni ningún otro programa.
+Hace falta una compu con **Windows 10 u 11** y unos **600 MB libres**. No se instala Python ni
+ningún otro programa: si la compu tiene **Chrome** usa Chrome; si no, **Edge**; y si no tiene
+ninguno de los dos (pasa en algunas Windows "livianas"), usa un navegador que viene adentro del .zip.
 
-1. **Bajar el archivo `Bot-SiGeS.zip`:**
+1. **Bajar el archivo `Bot-SiGeS.zip`** (unos 240 MB):
    **[⬇️ Descargar Bot-SiGeS.zip](https://github.com/MaxiNunez24/bot-siges/releases/latest/download/Bot-SiGeS.zip)**
    (siempre baja la última versión). Queda en **Descargas**. Si el navegador avisa que "no se
    descarga habitualmente", elegí **Conservar**.
@@ -31,12 +32,10 @@ instala Python ni ningún otro programa.
 4. **Dejar un acceso directo en el escritorio** (opcional). Clic derecho sobre `Bot-SiGeS.exe` →
    **Mostrar más opciones** → **Enviar a** → **Escritorio (crear acceso directo)**. Copiar el .exe
    solo al escritorio no sirve: tiene que quedarse en su carpeta.
-5. **Comprobar que anda en esta compu**, sin tocar el SiGeS real:
-   1. Abrí la carpeta `Bot-SiGeS`, hacé clic en la barra de dirección (arriba, donde dice la
-      ruta), escribí `cmd` y apretá Enter. Se abre una ventana negra en esa carpeta.
-   2. Escribí `Bot-SiGeS.exe --autoprueba` y apretá Enter.
-   3. Esperá medio minuto: aparece la carpeta **`resultados`** con un archivo `carga-….csv`. Si
-      está, todo anda. Ese archivo es de datos inventados: se puede borrar.
+5. **Comprobar que anda en esta compu**, sin tocar el SiGeS real: en la pestaña **Opciones**,
+   tocá **🩺 Probar esta compu**. En medio minuto aparece un cartel: **"✅ El bot anda en esta
+   compu. Usó Google Chrome…"** (o el navegador que haya encontrado). Si dice ❌, sacale una foto
+   al cartel y mandásela al docente.
 
 **Actualizar a una versión nueva:** guardá aparte `configuracion.json` (tus opciones), borrá la
 carpeta `Bot-SiGeS` vieja, descomprimí la nueva igual que en el paso 2 y volvé a poner
@@ -60,7 +59,9 @@ La ventana tiene cuatro pestañas, en orden:
    quedó bien cargada), y los **valores fijos** para lo que la planilla todavía no pregunta
    (transporte, WhatsApp, vivienda). Distrito y Localidad: Ensenada. Se guarda en
    `configuracion.json`, al lado del programa.
-4. **Cargar**: se abre el navegador, **iniciás sesión vos** y abrís el listado del trayecto. Desde
+4. **Cargar**: se abre una ventana de navegador **aparte** (no usa tus pestañas ni tus contraseñas
+   guardadas): **iniciás sesión vos** ahí, aunque ya tengas el SiGeS abierto en tu Chrome de
+   siempre, y abrís el listado del trayecto. Desde
    ahí el bot, por cada persona, toca **+**, busca el DNI, completa, y espera a que revises,
    apretes "Guardar estudiante" y hagas la encuesta.
 
@@ -103,7 +104,17 @@ armar_exe.bat
 ```
 
 Deja `dist\Bot-SiGeS\Bot-SiGeS.exe` y `Bot-SiGeS.zip` (el que se pasa). Es una carpeta y no un solo
-.exe a propósito: arranca más rápido y los antivirus la frenan menos.
+.exe a propósito: arranca más rápido y los antivirus la frenan menos. Lleva adentro un Chromium
+(por eso pesa ~240 MB), para las compus sin Chrome ni Edge.
+
+Para probar el .exe armado (sin ventanas; deja el resultado en `resultados\autoprueba.txt`):
+
+```
+dist\Bot-SiGeS\Bot-SiGeS.exe --autoprueba --callado --navegador=chromium
+```
+
+`--navegador=chrome|msedge|chromium` fuerza uno; sin eso, prueba Chrome → Edge → el incluido. Para
+publicar una versión: `gh release create vX.Y.Z Bot-SiGeS.zip`.
 
 ### Desde la terminal
 

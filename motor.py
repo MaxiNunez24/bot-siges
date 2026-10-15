@@ -14,11 +14,13 @@ Así el motor no sabe nada de tkinter, y se puede probar con un `ui` de mentira.
 """
 import csv
 import json
+import os
 import pathlib
 import sys
 import time
 from datetime import datetime
 
+import playwright
 from playwright.sync_api import sync_playwright
 
 import siges_real
@@ -47,13 +49,30 @@ def guardar_ajustes(ajustes):
     AJUSTES.write_text(json.dumps(ajustes, ensure_ascii=False, indent=2), encoding='utf-8')
 
 
-def abrir_navegador(p):
-    """Edge, que viene con todas las Windows: así el .exe no necesita bajar un
-    navegador. Si no está (una Linux, una compu rara), el Chromium de Playwright."""
-    try:
-        return p.chromium.launch(channel='msedge', headless=False)
-    except Exception:                                   # noqa: BLE001
-        return p.chromium.launch(headless=False)
+# El Chromium que viaja adentro del .exe (armar_exe.bat lo instala dentro del
+# paquete de Playwright). Con la variable en "0", Playwright lo busca ahí y no en
+# la carpeta del usuario, donde en la compu de preceptoría no hay nada.
+INCLUIDO = pathlib.Path(playwright.__file__).parent / 'driver' / 'package' / '.local-browsers'
+if INCLUIDO.is_dir():
+    os.environ['PLAYWRIGHT_BROWSERS_PATH'] = '0'
+
+# En orden: el que la persona ya conoce, el que trae Windows, y el que trae el bot.
+NAVEGADORES = [('chrome', 'Google Chrome'), ('msedge', 'Microsoft Edge'), ('chromium', 'el navegador incluido')]
+
+
+def abrir_navegador(p, sin_ventana=False, solo=None):
+    """Devuelve (navegador, nombre). Prueba Chrome, Edge y el incluido, en ese
+    orden; `solo` fuerza uno (para la autoprueba). Si ninguno abre, el error
+    dice en castellano qué pasó con cada uno."""
+    fallas = []
+    for canal, nombre in NAVEGADORES:
+        if solo and canal != solo:
+            continue
+        try:
+            return p.chromium.launch(channel=canal, headless=sin_ventana), nombre
+        except Exception as e:                          # noqa: BLE001
+            fallas.append(f'{nombre}: {str(e).splitlines()[0][:120]}')
+    raise RuntimeError('No pude abrir ningún navegador.\n' + '\n'.join(fallas))
 
 
 def correr(personas, ajustes, ui):
@@ -68,7 +87,8 @@ def correr(personas, ajustes, ui):
     resultados = []
     with sync_playwright() as p:
         ui.contar('Abriendo el navegador…', 'info')
-        nav = abrir_navegador(p)
+        nav, nombre = abrir_navegador(p, ajustes.get('sin_ventana', False), ajustes.get('navegador'))
+        ui.contar(f'Navegador: {nombre}', 'info')
         page = nav.new_page()
 
         if ajustes.get('simulador'):

@@ -26,6 +26,9 @@ vos todo lo que hay que decidir.
 
 LOS PASOS
 
+0.  La primera vez en cada compu: pestaña "Opciones" → "Probar esta compu". En
+    medio minuto te dice si el bot anda y con qué navegador.
+
 1.  Bajá la planilla de Google: Archivo → Descargar → Microsoft Excel (.xlsx).
     Tiene que ser .xlsx: así se ven las filas pintadas de amarillo.
 
@@ -38,8 +41,9 @@ LOS PASOS
 3.  Pestaña "Opciones": la dirección del SiGeS, y qué hacer con lo que la planilla
     no trae (vivienda, transporte, WhatsApp). Se guarda para la próxima vez.
 
-4.  Pestaña "Cargar": tocá Empezar. Se abre el navegador: iniciá sesión VOS y abrí
-    el listado del trayecto. Desde ahí, por cada persona, el bot busca el DNI y
+4.  Pestaña "Cargar": tocá Empezar. Se abre una ventana de navegador APARTE (Chrome,
+    si está): iniciá sesión VOS ahí, aunque ya tengas el SiGeS abierto en tu Chrome
+    de siempre, y abrí el listado del trayecto. Desde ahí, por cada persona, el bot busca el DNI y
     completa. Vos revisás, completás lo marcado en amarillo, apretás "Guardar
     estudiante", hacés la encuesta, y tocás "Siguiente".
 
@@ -290,7 +294,22 @@ class App(tk.Tk):
         si_no(7, 2, 'educacion_completo', 'Completo')
         si_no(7, 4, 'educacion_cursando', 'Cursando')
 
-        ttk.Button(marco, text='Guardar opciones', command=self._guardar_ajustes).pack(anchor='e', pady=10)
+        abajo = ttk.Frame(marco)
+        abajo.pack(fill='x', pady=10)
+        self.btn_probar = ttk.Button(abajo, text='🩺 Probar esta compu', command=self._probar)
+        self.btn_probar.pack(side='left')
+        self.lbl_probar = ttk.Label(abajo, text='', foreground='#555')
+        self.lbl_probar.pack(side='left', padx=10)
+        ttk.Button(abajo, text='Guardar opciones', command=self._guardar_ajustes).pack(side='right')
+
+    def _probar(self):
+        """La autoprueba, en otro hilo para que la ventana no se congele."""
+        if self.corriendo:
+            return
+        self.corriendo = True
+        self.btn_probar.configure(state='disabled')
+        self.lbl_probar.configure(text='Probando, tarda medio minuto… (no se toca nada real)')
+        threading.Thread(target=lambda: self.cola.put(('aviso', *autoprueba())), daemon=True).start()
 
     def _leer_opciones(self):
         self.ajustes['url'] = self.v['url'].get().strip()
@@ -404,6 +423,12 @@ class App(tk.Tk):
                     self.corriendo = False
                     self.btn_empezar.configure(state='normal')
                     self.zona_accion.pack_forget()
+                elif tipo == 'aviso':
+                    ok, mensaje = pedido[1:]
+                    self.corriendo = False
+                    self.btn_probar.configure(state='normal')
+                    self.lbl_probar.configure(text='')
+                    (messagebox.showinfo if ok else messagebox.showerror)('Prueba del bot', mensaje)
         except queue.Empty:
             pass
         self.after(100, self._atender_cola)
@@ -450,10 +475,12 @@ class UiDesdeHilo:
         return self._pedir('preguntar', pregunta)
 
 
-def autoprueba():
-    """Bot-SiGeS.exe --autoprueba: carga los datos de ejemplo en el simulador, sin
-    ventanas, y deja el resumen en resultados/. Sirve para saber si el .exe anda en
-    una compu (Edge, Playwright, permisos) sin tocar nada real."""
+def autoprueba(navegador=None):
+    """¿Anda el bot en esta compu? Carga los datos de ejemplo en el simulador, sin
+    mostrar el navegador, y no toca nada real. Devuelve (ok, mensaje).
+
+    Lo usan el botón "Probar esta compu" de Opciones y `Bot-SiGeS.exe --autoprueba`.
+    `navegador` ('chrome', 'msedge' o 'chromium') fuerza uno, para probar cada uno."""
     import pathlib
     ejemplo = str(pathlib.Path(__file__).parent / 'datos_ejemplo.csv')
     _, filas, _ = planilla_google.todas(ejemplo)
@@ -464,21 +491,42 @@ def autoprueba():
             personas.append((f['_fila'], datos))
 
     class Callado:
-        def contar(self, texto, tipo='info'): pass
+        usado = '?'
+        def contar(self, texto, tipo='info'):
+            if texto.startswith('Navegador: '):
+                self.usado = texto.removeprefix('Navegador: ')
         def progreso(self, hechos, total, quien): pass
         def esperar(self, mensaje, boton): pass
         def preguntar(self, pregunta): return True
 
-    motor.abrir_navegador = lambda p: p.chromium.launch(channel='msedge', headless=True)
-    ajustes = dict(motor.cargar_ajustes(), simulador=True, demo=False, lento=False)
-    resultados = motor.correr(personas, ajustes, Callado())
-    return 0 if resultados and all(r['resultado'] == 'completado' for r in resultados) else 1
+    ui = Callado()
+    ajustes = dict(motor.cargar_ajustes(), simulador=True, demo=False, lento=False,
+                   sin_ventana=True, navegador=navegador)
+    try:
+        resultados = motor.correr(personas, ajustes, ui)
+    except Exception as e:                              # noqa: BLE001
+        return False, f'❌ El bot NO anda en esta compu.\n\n{e}'
+    bien = sum(r['resultado'] == 'completado' for r in resultados)
+    if resultados and bien == len(resultados):
+        return True, (f'✅ El bot anda en esta compu.\n\nUsó {ui.usado} y cargó las {bien} personas '
+                      'de prueba en el simulador. No se tocó nada real.')
+    return False, (f'⚠️ Se abrió {ui.usado}, pero solo cargó {bien} de {len(resultados)} personas de '
+                   'prueba. Mirá el resumen en la carpeta resultados.')
 
 
 if __name__ == '__main__':
     import sys
     if '--autoprueba' in sys.argv:
-        sys.exit(autoprueba())
+        # --navegador=chrome|msedge|chromium prueba uno solo; --callado no muestra la ventanita.
+        forzado = next((a.split('=', 1)[1] for a in sys.argv if a.startswith('--navegador=')), None)
+        ok, mensaje = autoprueba(forzado)
+        motor.RESULTADOS.mkdir(exist_ok=True)
+        (motor.RESULTADOS / 'autoprueba.txt').write_text(mensaje, encoding='utf-8')
+        if '--callado' not in sys.argv:
+            raiz = tk.Tk()
+            raiz.withdraw()
+            (messagebox.showinfo if ok else messagebox.showerror)('Prueba del bot', mensaje)
+        sys.exit(0 if ok else 1)
     try:
         # Sin esto, con la pantalla al 125% Windows estira la ventana y la letra se ve borrosa.
         import ctypes

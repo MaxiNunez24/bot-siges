@@ -169,7 +169,9 @@ def _menu(page, abridor, opcion):
 
 
 def _buscador(page, rotulo, texto):
-    campo = page.get_by_label(rotulo, exact=True)
+    # Por rol y no por rótulo: al tocarlo, Angular arma la lista desplegable
+    # (role=listbox) con el mismo rótulo, y get_by_label encuentra dos.
+    campo = page.get_by_role('combobox', name=rotulo, exact=True)
     if campo.count() != 1:
         return False, f'no encontré el buscador "{rotulo}"'
     campo.click()

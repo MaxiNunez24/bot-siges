@@ -19,6 +19,7 @@ import csv
 import json
 import os
 import pathlib
+import queue
 import sys
 import threading
 import time
@@ -120,9 +121,122 @@ def esperando(contexto, pedir, *args, cancelado=lambda: False):
     return respuesta[0] if respuesta else None
 
 
+def _abrir(p, ajustes, ui):
+    """Abre el navegador y su contexto. Devuelve (navegador, contexto)."""
+    ui.contar('Abriendo el navegador…', 'info')
+    nav, nombre = abrir_navegador(p, ajustes.get('sin_ventana', False), ajustes.get('navegador'))
+    ui.contar(f'Navegador: {nombre}', 'info')
+    # Sin esto Playwright dibuja la página siempre a 1280×720, aunque la ventana
+    # sea más chica: en una notebook la mitad del SiGeS queda fuera de la vista.
+    contexto = nav.new_context(no_viewport=not ajustes.get('sin_ventana', False))
+    contexto.new_page().goto(_SIMULADOR() if ajustes.get('simulador') else ajustes['url'])
+    return nav, contexto
+
+
+def _SIMULADOR():
+    import bot                                          # el simulador de la clase, para ensayar
+    return bot.SIMULADOR
+
+
 def correr(personas, ajustes, ui):
-    """personas: [(fila, datos)] ya normalizados y elegidos en el listado.
-    ajustes: {'url', 'simulador', 'demo', 'lento', 'config'}."""
+    """Una carga de principio a fin: abre el navegador, carga y lo cierra.
+    La usan la autoprueba y `bot.py`; la aplicación usa `Sesion`, que lo deja abierto."""
+    with sync_playwright() as p:
+        nav, contexto = _abrir(p, ajustes, ui)
+        resultados = cargar_en(contexto, personas, ajustes, ui, primera=True)
+        if not getattr(ui, 'cancelado', lambda: False)():
+            try:
+                esperando(contexto, ui.esperar, 'Terminó. Podés cerrar el navegador desde acá.',
+                          'Cerrar el navegador')
+            except Cancelado:
+                pass
+        nav.close()
+    return resultados
+
+
+class Sesion:
+    """El navegador de la aplicación: se abre una vez y queda abierto hasta que la
+    persona lo cierra. Así se inicia sesión una sola vez y, después de una carga,
+    se puede seguir corrigiendo a mano o cargar a los que faltaron.
+
+    Playwright no deja usar el navegador desde otro hilo que el que lo abrió, así
+    que vive en un hilo propio y las cargas le llegan por una cola. Mientras no
+    hay carga, el hilo sigue atendiendo al navegador (si no, las pestañas nuevas
+    quedan en blanco: ver `esperando`)."""
+
+    def __init__(self, ui, al_cambiar=lambda abierto: None):
+        self.ui = ui
+        self.al_cambiar = al_cambiar                    # avisa si el navegador se abrió o se cerró
+        self.trabajos = queue.Queue()
+        self.hilo = None
+
+    def abierta(self):
+        return self.hilo is not None and self.hilo.is_alive()
+
+    def abrir(self, ajustes):
+        if not self.abierta():
+            self.trabajos = queue.Queue()
+            self.hilo = threading.Thread(target=self._vivir, args=(dict(ajustes),), daemon=True)
+            self.hilo.start()
+
+    def cargar(self, personas, ajustes, al_terminar):
+        """Encola una carga; `al_terminar(resultados)` se llama al final, pase lo que pase."""
+        self.abrir(ajustes)
+        self.trabajos.put((personas, ajustes, al_terminar))
+
+    def cerrar(self, esperar_hasta=0):
+        if self.abierta():
+            self.trabajos.put(None)
+            self.hilo.join(esperar_hasta)
+
+    def _vivir(self, ajustes):
+        try:
+            with sync_playwright() as p:
+                nav, contexto = _abrir(p, ajustes, self.ui)
+                self.al_cambiar(True)
+                if not ajustes.get('simulador'):
+                    self.ui.contar('Iniciá sesión en el navegador. Queda abierto hasta que lo cierres.', 'info')
+                primera = True
+                while nav.is_connected() and contexto.pages:
+                    try:
+                        trabajo = self.trabajos.get_nowait()
+                    except queue.Empty:
+                        try:
+                            pagina_del_siges(contexto).wait_for_timeout(200)
+                        except Exception:               # noqa: BLE001  (cerraron una pestaña justo)
+                            time.sleep(0.2)
+                        continue
+                    if trabajo is None:
+                        break
+                    personas, ajustes_carga, al_terminar = trabajo
+                    resultados = []
+                    try:
+                        resultados = cargar_en(contexto, personas, ajustes_carga, self.ui, primera)
+                        if not ajustes_carga.get('simulador'):
+                            primera = False
+                    except Exception as e:              # noqa: BLE001
+                        self.ui.contar(f'⛔ Se cortó: {type(e).__name__}: {e}', 'mal')
+                    finally:
+                        al_terminar(resultados)
+                try:
+                    nav.close()
+                except Exception:                       # noqa: BLE001  (ya lo habían cerrado)
+                    pass
+        except Exception as e:                          # noqa: BLE001
+            self.ui.contar(f'⛔ No pude abrir el navegador: {e}', 'mal')
+        finally:
+            # Si quedó una carga encolada (la pidieron justo cuando se cerraba), se avisa que terminó.
+            while not self.trabajos.empty():
+                trabajo = self.trabajos.get_nowait()
+                if trabajo:
+                    trabajo[2]([])
+            self.ui.contar('Se cerró el navegador.', 'info')
+            self.al_cambiar(False)
+
+
+def cargar_en(contexto, personas, ajustes, ui, primera):
+    """Una carga, en un navegador ya abierto. `primera`: si todavía no se inició
+    sesión (cambia lo que se le pide a la persona antes de empezar)."""
     lento = 0.35 if ajustes.get('lento') else 0
     cancelado = getattr(ui, 'cancelado', lambda: False)
 
@@ -132,44 +246,35 @@ def correr(personas, ajustes, ui):
         if lento:
             time.sleep(lento)
 
+    def esperar(mensaje, boton):
+        esperando(contexto, ui.esperar, mensaje, boton, cancelado=cancelado)
+        return pagina_del_siges(contexto)
+
     resultados = []
-    with sync_playwright() as p:
-        ui.contar('Abriendo el navegador…', 'info')
-        nav, nombre = abrir_navegador(p, ajustes.get('sin_ventana', False), ajustes.get('navegador'))
-        ui.contar(f'Navegador: {nombre}', 'info')
-        # Sin esto Playwright dibuja la página siempre a 1280×720, aunque la ventana
-        # sea más chica: en una notebook la mitad del SiGeS queda fuera de la vista.
-        contexto = nav.new_context(no_viewport=not ajustes.get('sin_ventana', False))
-        page = contexto.new_page()
-
+    try:
         if ajustes.get('simulador'):
-            import bot                                  # el simulador de la clase, para ensayar
-            page.goto(bot.SIMULADOR)
-
-        def esperar(mensaje, boton):
-            esperando(contexto, ui.esperar, mensaje, boton, cancelado=cancelado)
-            return pagina_del_siges(contexto)
-
-        try:
-            if not ajustes.get('simulador'):
-                page.goto(ajustes['url'])
-                page = esperar('En la ventana del navegador: iniciá sesión, entrá al SiGeS y abrí el '
-                               'listado del trayecto (donde está el botón +). Cuando lo veas, tocá el '
-                               'botón de acá.', 'Ya está, empezar')
-                page.bring_to_front()
-                ui.contar(f'Trabajo en la pestaña: {page.url}', 'info')
-            page = cargar_todas(personas, ajustes, ui, page, esperar, respirar, cancelado, lento, resultados)
-        except Cancelado:
-            ui.contar('⏹ Carga cancelada. Lo que ya estaba completado quedó como estaba en el SiGeS.', 'aviso')
-        ui.progreso(len(resultados), len(personas), '')
-        archivo = guardar_resumen(resultados)
-        ui.contar(f'El resumen quedó en {archivo}', 'ok')
-        if not cancelado():
-            try:
-                esperar('Terminó. Podés cerrar el navegador desde acá.', 'Cerrar el navegador')
-            except Cancelado:
-                pass
-        nav.close()
+            simulador = _SIMULADOR()
+            page = next((p for p in contexto.pages if p.url == simulador), None)
+            if page is None:
+                page = contexto.new_page()
+                page.goto(simulador)
+        else:
+            if not any(p.url.startswith('http') for p in contexto.pages):
+                contexto.new_page().goto(ajustes['url'])   # se había abierto solo con el simulador
+            page = esperar('En la ventana del navegador: iniciá sesión, entrá al SiGeS y abrí el listado '
+                           'del trayecto (donde está el botón +). Cuando lo veas, tocá el botón de acá.'
+                           if primera else
+                           'En el navegador, dejá abierto el listado del trayecto (donde está el botón +). '
+                           'Cuando lo veas, tocá el botón de acá.', 'Ya está, empezar')
+            ui.contar(f'Trabajo en la pestaña: {page.url}', 'info')
+        page.bring_to_front()
+        cargar_todas(personas, ajustes, ui, page, esperar, respirar, cancelado, lento, resultados)
+        ui.progreso(len(personas), len(personas), '')
+    except Cancelado:
+        ui.contar('⏹ Carga cancelada. Lo que ya guardaste en el SiGeS queda guardado, y el navegador '
+                  'sigue abierto para que corrijas lo que haga falta.', 'aviso')
+    archivo = guardar_resumen(resultados)
+    ui.contar(f'El resumen quedó en {archivo}', 'ok')
     return resultados
 
 

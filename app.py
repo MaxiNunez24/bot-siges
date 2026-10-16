@@ -52,6 +52,10 @@ LOS PASOS
     completa. Vos revisás, completás lo marcado en amarillo, apretás "Guardar
     estudiante", hacés la encuesta, y tocás "Siguiente".
     Si hace falta frenar, "Cancelar la carga": no hay que cerrar el programa.
+    El navegador queda ABIERTO al terminar o al cancelar: la sesión se inicia una
+    sola vez, y podés corregir a mano o cargar a los que faltaron. Se cierra
+    cuando cerrás su ventana (o el programa). "Abrir el navegador" lo abre sin
+    cargar a nadie, por ejemplo para iniciar sesión antes.
 
 LO QUE EL BOT NO HACE NUNCA
 
@@ -158,6 +162,8 @@ class App(tk.Tk):
         self.cola = queue.Queue()
         self.corriendo = False
         self.cancelar = threading.Event()
+        self.ui_motor = UiDesdeHilo(self.cola, self.cancelar)
+        self.sesion = motor.Sesion(self.ui_motor, lambda abierto: self.cola.put(('navegador', abierto)))
 
         self.pestanas = ttk.Notebook(self)
         self.pestanas.pack(fill='both', expand=True, padx=8, pady=8)
@@ -518,6 +524,10 @@ class App(tk.Tk):
         self.btn_empezar.pack(side='left')
         self.btn_cancelar = ttk.Button(botonera, text='⏹ Cancelar la carga', command=self._cancelar, state='disabled')
         self.btn_cancelar.pack(side='left', padx=10)
+        self.btn_navegador = ttk.Button(botonera, text='🌐 Abrir el navegador', command=self._abrir_navegador)
+        self.btn_navegador.pack(side='left')
+        self.lbl_navegador = ttk.Label(botonera, text='Navegador cerrado', foreground='#555')
+        self.lbl_navegador.pack(side='left', padx=10)
         self.lbl_progreso = ttk.Label(marco, text='')
         self.lbl_progreso.pack(anchor='w', pady=(8, 2))
         self.barra = ttk.Progressbar(marco, mode='determinate')
@@ -558,17 +568,23 @@ class App(tk.Tk):
         self.cancelar.clear()
         self.btn_empezar.configure(state='disabled')
         self.btn_cancelar.configure(state='normal')
+        self.barra.configure(maximum=len(elegidas), value=0)
+        self.lbl_progreso.configure(text=f'0 de {len(elegidas)}')
         self.registro.configure(state='normal')
         self.registro.delete('1.0', 'end')
         self.registro.configure(state='disabled')
-        threading.Thread(target=self._trabajar, args=(elegidas, ajustes), daemon=True).start()
+        # El navegador queda abierto al terminar: la próxima carga usa la misma sesión.
+        self.sesion.cargar(elegidas, ajustes, lambda resultados: self.cola.put(('fin',)))
 
-    def _trabajar(self, elegidas, ajustes):
-        try:
-            motor.correr(elegidas, ajustes, UiDesdeHilo(self.cola, self.cancelar))
-        except Exception as e:                          # noqa: BLE001
-            self.cola.put(('contar', f'⛔ Se cortó: {type(e).__name__}: {e}', 'mal'))
-        self.cola.put(('fin',))
+    def _abrir_navegador(self):
+        """Abre el navegador sin cargar a nadie: para iniciar sesión antes, o para
+        corregir a mano. Queda abierto hasta que se cierra su ventana."""
+        if self.sesion.abierta():
+            return
+        self._guardar_ajustes(avisar=False)
+        self.lbl_navegador.configure(text='Abriendo…')
+        self.btn_navegador.configure(state='disabled')
+        self.sesion.abrir(self.ajustes)
 
     # El hilo del motor no puede tocar la ventana: deja pedidos en la cola, y
     # acá (en el hilo de la ventana) se atienden cada 100 ms.
@@ -605,6 +621,15 @@ class App(tk.Tk):
                     self.btn_empezar.configure(state='normal')
                     self.btn_cancelar.configure(state='disabled')
                     self.zona_accion.pack_forget()
+                    self._pedido = None
+                    if self.cancelar.is_set():          # cancelada: no queda "1 de 11" colgado
+                        self.barra.configure(value=0)
+                        self.lbl_progreso.configure(text='Cancelada. Lo hecho está en el registro de abajo.')
+                elif tipo == 'navegador':
+                    abierto = pedido[1]
+                    self.lbl_navegador.configure(text='Navegador abierto: queda así hasta que lo cierres'
+                                                 if abierto else 'Navegador cerrado')
+                    self.btn_navegador.configure(state='disabled' if abierto else 'normal')
                 elif tipo == 'aviso':
                     ok, mensaje = pedido[1:]
                     self.corriendo = False
@@ -631,9 +656,9 @@ class App(tk.Tk):
         if not self.corriendo or self.cancelar.is_set():
             return
         if not messagebox.askyesno('Cancelar la carga',
-                                   'El bot deja de cargar y cierra su navegador.\n\n'
-                                   'Lo que ya guardaste en el SiGeS queda guardado; el formulario que '
-                                   'esté abierto sin guardar se pierde.\n\n¿Cancelar?'):
+                                   'El bot deja de cargar. El navegador queda abierto, con lo que '
+                                   'haya en pantalla, para que lo termines o corrijas a mano.\n\n'
+                                   'Lo que ya guardaste en el SiGeS queda guardado.\n\n¿Cancelar?'):
             return
         self.cancelar.set()
         self.btn_cancelar.configure(state='disabled')
@@ -643,6 +668,8 @@ class App(tk.Tk):
         if self.corriendo and not messagebox.askyesno('Salir', 'Hay una carga en curso. ¿Cerrar igual?'):
             return
         self.cancelar.set()
+        self._responder(None)
+        self.sesion.cerrar(esperar_hasta=3)
         self.destroy()
 
 

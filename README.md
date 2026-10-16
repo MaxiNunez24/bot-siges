@@ -69,6 +69,9 @@ La ventana tiene cuatro pestañas, en orden:
    ahí el bot, por cada persona, toca **+**, busca el DNI, completa, y espera a que revises,
    apretes "Guardar estudiante" y hagas la encuesta. **⏹ Cancelar la carga** la frena en
    cualquier momento sin cerrar el programa (deja el resumen de lo hecho hasta ahí).
+   El navegador **queda abierto** al terminar o al cancelar, hasta que se cierra su ventana: la
+   sesión se inicia una sola vez, y se puede corregir a mano o cargar a los que faltaron.
+   **🌐 Abrir el navegador** lo abre sin cargar a nadie (por ejemplo, para iniciar sesión antes).
 
 Al terminar deja un resumen en `resultados/carga-AAAA-MM-DD_HH-MM.csv`: a quién completó, qué quedó
 pendiente, qué se cargó con valores fijos y, en modo demo, si se marcó como bien cargado.

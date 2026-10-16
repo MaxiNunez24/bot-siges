@@ -9,6 +9,7 @@ próxima persona. El bot nunca guarda, nunca contesta la encuesta y nunca toca
 """
 import queue
 import threading
+import unicodedata
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
@@ -37,15 +38,20 @@ LOS PASOS
       · Las que tienen un problema (un DNI raro, una fecha imposible) aparecen en
         rojo, con el motivo, y no se pueden tildar: hay que corregir la planilla.
     Tildá y destildá a quién cargar.
+      · Para cargar solo una parte: en "Cargar desde … hasta …" escribí la fila,
+        el DNI, el apellido o el nombre de la primera y la última persona, o
+        mové los dos extremos del deslizador. Solo se carga lo que queda a la vista.
+      · "Buscar en cualquier columna" achica el listado mientras escribís.
 
 3.  Pestaña "Opciones": la dirección del SiGeS, y qué hacer con lo que la planilla
     no trae (vivienda, transporte, WhatsApp). Se guarda para la próxima vez.
 
 4.  Pestaña "Cargar": tocá Empezar. Se abre una ventana de navegador APARTE (Chrome,
-    si está): iniciá sesión VOS ahí, aunque ya tengas el SiGeS abierto en tu Chrome
-    de siempre, y abrí el listado del trayecto. Desde ahí, por cada persona, el bot busca el DNI y
+    si está), en el menú de ABC: iniciá sesión VOS ahí, aunque ya tengas el SiGeS
+    abierto en tu Chrome de siempre, entrá al SiGeS y abrí el listado del trayecto. Desde ahí, por cada persona, el bot busca el DNI y
     completa. Vos revisás, completás lo marcado en amarillo, apretás "Guardar
     estudiante", hacés la encuesta, y tocás "Siguiente".
+    Si hace falta frenar, "Cancelar la carga": no hay que cerrar el programa.
 
 LO QUE EL BOT NO HACE NUNCA
 
@@ -57,6 +63,79 @@ LO QUE EL BOT NO HACE NUNCA
 Para practicar sin tocar el sistema real: en Opciones, tildá "Ensayo con el
 simulador".
 """
+
+
+def sin_tildes(texto):
+    """Para buscar: 'Pérez' encuentra 'perez' y al revés."""
+    texto = unicodedata.normalize('NFD', str(texto).lower())
+    return ''.join(c for c in texto if unicodedata.category(c) != 'Mn')
+
+
+class RangoDoble(tk.Canvas):
+    """Un deslizador con dos extremos: elige de qué fila a qué fila del listado.
+
+    Trabaja con posiciones 0..n-1 (el orden del listado). Cuando la persona
+    mueve un extremo, llama a `al_cambiar(desde, hasta)`."""
+
+    RADIO = 9
+
+    def __init__(self, padre, al_cambiar, **kw):
+        super().__init__(padre, height=2 * self.RADIO + 8, highlightthickness=0, **kw)
+        self.al_cambiar = al_cambiar
+        self.n, self.a, self.b = 0, 0, 0
+        self._arrastrando = None
+        self.bind('<Configure>', lambda e: self._dibujar())
+        self.bind('<Button-1>', self._tocar)
+        self.bind('<B1-Motion>', self._mover)
+        self.bind('<ButtonRelease-1>', lambda e: setattr(self, '_arrastrando', None))
+
+    def configurar(self, n):
+        self.n, self.a, self.b = n, 0, max(n - 1, 0)
+        self._dibujar()
+
+    def poner(self, a, b):
+        self.a, self.b = sorted((a, b))
+        self._dibujar()
+
+    def _x(self, i):
+        ancho = self.winfo_width() - 2 * self.RADIO - 2
+        return self.RADIO + 1 + (ancho * i / (self.n - 1) if self.n > 1 else 0)
+
+    def _i(self, x):
+        if self.n <= 1:
+            return 0
+        ancho = self.winfo_width() - 2 * self.RADIO - 2
+        return max(0, min(self.n - 1, round((x - self.RADIO - 1) * (self.n - 1) / max(ancho, 1))))
+
+    def _dibujar(self):
+        self.delete('all')
+        y = self.RADIO + 4
+        self.create_line(self._x(0), y, self._x(max(self.n - 1, 0)), y, fill='#ccc', width=4)
+        if not self.n:
+            return
+        self.create_line(self._x(self.a), y, self._x(self.b), y, fill='#2e86c1', width=6)
+        for i in (self.a, self.b):
+            x = self._x(i)
+            self.create_oval(x - self.RADIO, y - self.RADIO, x + self.RADIO, y + self.RADIO,
+                             fill='white', outline='#2e86c1', width=3)
+
+    def _tocar(self, evento):
+        if not self.n:
+            return
+        i = self._i(evento.x)
+        self._arrastrando = 'a' if abs(i - self.a) <= abs(i - self.b) and i <= self.b else 'b'
+        self._mover(evento)
+
+    def _mover(self, evento):
+        if not self._arrastrando:
+            return
+        i = self._i(evento.x)
+        if self._arrastrando == 'a':
+            self.a = min(i, self.b)
+        else:
+            self.b = max(i, self.a)
+        self._dibujar()
+        self.al_cambiar(self.a, self.b)
 
 
 class App(tk.Tk):
@@ -73,8 +152,12 @@ class App(tk.Tk):
         self.ajustes = motor.cargar_ajustes()
         self.filas = []          # (número de fila, datos, problemas, amarilla)
         self.marcadas = set()    # índices de self.filas
+        self.textos = []         # por fila, todo su contenido junto y sin tildes, para buscar
+        self.visibles = []       # índices de self.filas que pasan el rango y la búsqueda
+        self.rango = (0, 0)
         self.cola = queue.Queue()
         self.corriendo = False
+        self.cancelar = threading.Event()
 
         self.pestanas = ttk.Notebook(self)
         self.pestanas.pack(fill='both', expand=True, padx=8, pady=8)
@@ -117,6 +200,33 @@ class App(tk.Tk):
         self.hasta.pack(side='left', padx=4)
         ttk.Label(filtro, text='(dd/mm/aaaa, opcional)').pack(side='left')
         ttk.Button(filtro, text='Aplicar', command=self._mostrar).pack(side='left', padx=8)
+
+        # El rango: los inscriptos vienen en orden, así que alcanza con decir el
+        # primero y el último. Cada extremo se puede escribir (fila, DNI, apellido,
+        # nombre, lo que sea de cualquier columna) o mover en el deslizador.
+        rango = ttk.Frame(marco)
+        rango.pack(fill='x', pady=(8, 0))
+        ttk.Label(rango, text='Cargar desde').pack(side='left')
+        self.rango_desde = ttk.Entry(rango, width=18)
+        self.rango_desde.pack(side='left', padx=4)
+        ttk.Label(rango, text='hasta').pack(side='left')
+        self.rango_hasta = ttk.Entry(rango, width=18)
+        self.rango_hasta.pack(side='left', padx=4)
+        ttk.Label(rango, text='(número de fila, DNI, apellido o nombre)', foreground='#555').pack(side='left')
+        for entrada in (self.rango_desde, self.rango_hasta):
+            entrada.bind('<KeyRelease>', lambda e: self._rango_escrito())
+        ttk.Button(rango, text='Todos', command=self._rango_todo).pack(side='left', padx=8)
+        self.deslizador = RangoDoble(marco, self._rango_movido)
+        self.deslizador.pack(fill='x', pady=(4, 0))
+        self.lbl_rango = ttk.Label(marco, text='', foreground='#555')
+        self.lbl_rango.pack(anchor='w')
+
+        buscar = ttk.Frame(marco)
+        buscar.pack(fill='x', pady=(4, 0))
+        ttk.Label(buscar, text='🔎 Buscar en cualquier columna:').pack(side='left')
+        self.buscar = ttk.Entry(buscar, width=30)
+        self.buscar.pack(side='left', padx=4)
+        self.buscar.bind('<KeyRelease>', lambda e: self._pintar())
 
         self.lbl_columnas = ttk.Label(marco, text='', foreground='#555', wraplength=920, justify='left')
         self.lbl_columnas.pack(fill='x', pady=6)
@@ -173,8 +283,7 @@ class App(tk.Tk):
             hasta = planilla_google.a_fecha(self.hasta.get()) if self.hasta.get().strip() else None
         except Exception:                               # noqa: BLE001
             desde = hasta = None
-        self.filas, self.marcadas = [], set()
-        self.arbol.delete(*self.arbol.get_children())
+        self.filas, self.marcadas, self.textos = [], set(), []
         for cruda in self.crudas:
             f = cruda.get('_fecha')
             if (desde or hasta) and (f is None or (desde and f < desde) or (hasta and f > hasta)):
@@ -182,17 +291,78 @@ class App(tk.Tk):
             datos, problemas = normalizar.normalizar_fila(cruda)
             i = len(self.filas)
             self.filas.append((cruda['_fila'], datos, problemas, cruda['_amarilla']))
+            if not problemas and not cruda['_amarilla']:
+                self.marcadas.add(i)
+            self.textos.append(sin_tildes(' '.join(str(v) for k, v in cruda.items() if not k.startswith('_'))))
+        self.deslizador.configurar(len(self.filas))
+        self._rango_todo()
+
+    def _pintar(self):
+        """Vuelve a llenar la tabla con las filas que pasan el rango y la búsqueda."""
+        a, b = self.rango
+        busca = sin_tildes(self.buscar.get().strip())
+        self.visibles = [i for i in range(a, min(b, len(self.filas) - 1) + 1)
+                         if not busca or busca in self.textos[i] or busca == str(self.filas[i][0])]
+        self.arbol.delete(*self.arbol.get_children())
+        for i in self.visibles:
+            numero, datos, problemas, amarilla = self.filas[i]
             if problemas:
                 estado, tag = '⛔ ' + '; '.join(problemas), 'problema'
-            elif cruda['_amarilla']:
+            elif amarilla:
                 estado, tag = '🟨 Pintada de amarillo: no se carga (tildala si querés)', 'amarilla'
             else:
                 estado, tag = '✅ Lista', ''
-                self.marcadas.add(i)
             quien = f'{datos["apellidos"]}, {datos["nombres"]}'.strip(', ')
             self.arbol.insert('', 'end', iid=str(i), tags=(tag,),
-                              values=('☑' if i in self.marcadas else '☐', cruda['_fila'], quien, datos['dni'] or '', estado))
+                              values=('☑' if i in self.marcadas else '☐', numero, quien, datos['dni'] or '', estado))
+        if self.filas:
+            self.lbl_rango.configure(text=f'De {self._describir(a)}  a  {self._describir(b)}  '
+                                          f'({b - a + 1} de {len(self.filas)} filas)')
+        else:
+            self.lbl_rango.configure(text='')
         self._contar()
+
+    def _describir(self, i):
+        numero, datos, _, _ = self.filas[i]
+        return f'fila {numero} ({datos["apellidos"]}, {datos["nombres"]})'.replace(' (, )', '')
+
+    def _buscar_fila(self, texto, ultima=False):
+        """La posición de la fila que corresponde a lo escrito: un número de fila
+        exacto, o si no la primera (o la última) que lo contiene en alguna columna."""
+        texto = sin_tildes(texto.strip())
+        if not texto:
+            return None
+        if texto.isdigit():
+            for i, (numero, *_) in enumerate(self.filas):
+                if str(numero) == texto:
+                    return i
+        cuales = [i for i, t in enumerate(self.textos) if texto in t]
+        return (cuales[-1] if ultima else cuales[0]) if cuales else None
+
+    def _rango_escrito(self):
+        if not self.filas:
+            return
+        a = self._buscar_fila(self.rango_desde.get())
+        b = self._buscar_fila(self.rango_hasta.get(), ultima=True)
+        a = 0 if a is None else a
+        b = len(self.filas) - 1 if b is None else b
+        self.rango = tuple(sorted((a, b)))
+        self.deslizador.poner(*self.rango)
+        self._pintar()
+
+    def _rango_movido(self, a, b):
+        self.rango = (a, b)
+        for entrada, i in ((self.rango_desde, a), (self.rango_hasta, b)):
+            entrada.delete(0, 'end')
+            entrada.insert(0, str(self.filas[i][0]))
+        self._pintar()
+
+    def _rango_todo(self):
+        for entrada in (self.rango_desde, self.rango_hasta):
+            entrada.delete(0, 'end')
+        self.rango = (0, max(len(self.filas) - 1, 0))
+        self.deslizador.poner(*self.rango)
+        self._pintar()
 
     def _tocar_fila(self, evento):
         iid = self.arbol.identify_row(evento.y)
@@ -208,20 +378,25 @@ class App(tk.Tk):
         self._contar()
 
     def _tildar_listos(self):
-        for i, (_, _, problemas, amarilla) in enumerate(self.filas):
+        for i in self.visibles:
+            _, _, problemas, amarilla = self.filas[i]
             if not problemas and not amarilla:
                 self.marcadas.add(i)
                 self.arbol.set(str(i), 'marca', '☑')
         self._contar()
 
     def _destildar(self):
-        for i in list(self.marcadas):
+        for i in self.visibles:
             self.arbol.set(str(i), 'marca', '☐')
         self.marcadas.clear()
         self._contar()
 
     def _contar(self):
-        self.lbl_cuenta.configure(text=f'Se van a cargar: {len(self.marcadas)} de {len(self.filas)}')
+        self.lbl_cuenta.configure(text=f'Se van a cargar: {len(self.elegidas())} de {len(self.visibles)} a la vista')
+
+    def elegidas(self):
+        """Las tildadas que además están a la vista: fuera del rango o de la búsqueda no se cargan."""
+        return [i for i in self.visibles if i in self.marcadas]
 
     # ─────────────────────────── 3. Opciones ────────────────────────────
     def _pestana_opciones(self):
@@ -337,8 +512,12 @@ class App(tk.Tk):
     def _pestana_cargar(self):
         marco = ttk.Frame(self.pestanas, padding=12)
         self.pestanas.add(marco, text='▶️ Cargar')
-        self.btn_empezar = ttk.Button(marco, text='Empezar', style='Grande.TButton', command=self._empezar)
-        self.btn_empezar.pack(anchor='w')
+        botonera = ttk.Frame(marco)
+        botonera.pack(anchor='w')
+        self.btn_empezar = ttk.Button(botonera, text='Empezar', style='Grande.TButton', command=self._empezar)
+        self.btn_empezar.pack(side='left')
+        self.btn_cancelar = ttk.Button(botonera, text='⏹ Cancelar la carga', command=self._cancelar, state='disabled')
+        self.btn_cancelar.pack(side='left', padx=10)
         self.lbl_progreso = ttk.Label(marco, text='')
         self.lbl_progreso.pack(anchor='w', pady=(8, 2))
         self.barra = ttk.Progressbar(marco, mode='determinate')
@@ -362,7 +541,7 @@ class App(tk.Tk):
         if self.corriendo:
             return
         self._guardar_ajustes(avisar=False)
-        elegidas = [(self.filas[i][0], self.filas[i][1]) for i in sorted(self.marcadas)]
+        elegidas = [(self.filas[i][0], self.filas[i][1]) for i in self.elegidas()]
         if not elegidas:
             messagebox.showinfo('Nadie para cargar', 'En la pestaña Planilla no hay ninguna persona tildada.')
             return
@@ -376,7 +555,9 @@ class App(tk.Tk):
                                        'El bot completa y para: guardás vos, hacés la encuesta vos.\n\n¿Seguimos?'):
                 return
         self.corriendo = True
+        self.cancelar.clear()
         self.btn_empezar.configure(state='disabled')
+        self.btn_cancelar.configure(state='normal')
         self.registro.configure(state='normal')
         self.registro.delete('1.0', 'end')
         self.registro.configure(state='disabled')
@@ -384,7 +565,7 @@ class App(tk.Tk):
 
     def _trabajar(self, elegidas, ajustes):
         try:
-            motor.correr(elegidas, ajustes, UiDesdeHilo(self.cola))
+            motor.correr(elegidas, ajustes, UiDesdeHilo(self.cola, self.cancelar))
         except Exception as e:                          # noqa: BLE001
             self.cola.put(('contar', f'⛔ Se cortó: {type(e).__name__}: {e}', 'mal'))
         self.cola.put(('fin',))
@@ -422,6 +603,7 @@ class App(tk.Tk):
                 elif tipo == 'fin':
                     self.corriendo = False
                     self.btn_empezar.configure(state='normal')
+                    self.btn_cancelar.configure(state='disabled')
                     self.zona_accion.pack_forget()
                 elif tipo == 'aviso':
                     ok, mensaje = pedido[1:]
@@ -443,9 +625,24 @@ class App(tk.Tk):
         respuesta.append(valor)
         listo.set()
 
+    def _cancelar(self):
+        """Frena la carga sin cerrar el programa. Lo que ya se escribió en el
+        formulario abierto queda ahí: no se guarda nada solo."""
+        if not self.corriendo or self.cancelar.is_set():
+            return
+        if not messagebox.askyesno('Cancelar la carga',
+                                   'El bot deja de cargar y cierra su navegador.\n\n'
+                                   'Lo que ya guardaste en el SiGeS queda guardado; el formulario que '
+                                   'esté abierto sin guardar se pierde.\n\n¿Cancelar?'):
+            return
+        self.cancelar.set()
+        self.btn_cancelar.configure(state='disabled')
+        self._responder(None)                           # si estaba esperando un botón, lo suelta
+
     def _cerrar(self):
         if self.corriendo and not messagebox.askyesno('Salir', 'Hay una carga en curso. ¿Cerrar igual?'):
             return
+        self.cancelar.set()
         self.destroy()
 
 
@@ -453,8 +650,12 @@ class UiDesdeHilo:
     """Lo que ve el motor: cada método deja un pedido en la cola y, si hace falta
     una respuesta de la persona, espera a que la ventana la conteste."""
 
-    def __init__(self, cola):
+    def __init__(self, cola, cancelar=None):
         self.cola = cola
+        self.cancelar = cancelar or threading.Event()
+
+    def cancelado(self):
+        return self.cancelar.is_set()
 
     def contar(self, texto, tipo='info'):
         self.cola.put(('contar', texto, tipo))

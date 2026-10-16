@@ -54,16 +54,21 @@ La ventana tiene cuatro pestañas, en orden:
    - las filas **pintadas de amarillo** vienen destildadas (se pueden tildar a mano);
    - las que tienen un **problema en los datos** aparecen en rojo con el motivo, y no se pueden
      tildar: hay que corregir la planilla y volver a importarla;
-   - se puede filtrar por fecha de inscripción.
+   - se puede filtrar por fecha de inscripción;
+   - **rango**: "Cargar desde … hasta …" acepta número de fila, DNI, apellido o nombre de la
+     primera y la última persona, o se mueven los dos extremos del deslizador. Solo se carga lo
+     que queda a la vista;
+   - **Buscar en cualquier columna** achica el listado mientras se escribe.
 3. **Opciones**: la dirección del SiGeS, el **modo demo** (después de cada persona pregunta si
    quedó bien cargada), y los **valores fijos** para lo que la planilla todavía no pregunta
    (transporte, WhatsApp, vivienda). Distrito y Localidad: Ensenada. Se guarda en
    `configuracion.json`, al lado del programa.
 4. **Cargar**: se abre una ventana de navegador **aparte** (no usa tus pestañas ni tus contraseñas
-   guardadas): **iniciás sesión vos** ahí, aunque ya tengas el SiGeS abierto en tu Chrome de
-   siempre, y abrís el listado del trayecto. Desde
+   guardadas), en **menu.abc.gob.ar**: **iniciás sesión vos** ahí, aunque ya tengas el SiGeS abierto
+   en tu Chrome de siempre, entrás al SiGeS y abrís el listado del trayecto. Desde
    ahí el bot, por cada persona, toca **+**, busca el DNI, completa, y espera a que revises,
-   apretes "Guardar estudiante" y hagas la encuesta.
+   apretes "Guardar estudiante" y hagas la encuesta. **⏹ Cancelar la carga** la frena en
+   cualquier momento sin cerrar el programa (deja el resumen de lo hecho hasta ahí).
 
 Al terminar deja un resumen en `resultados/carga-AAAA-MM-DD_HH-MM.csv`: a quién completó, qué quedó
 pendiente, qué se cargó con valores fijos y, en modo demo, si se marcó como bien cargado.
@@ -126,7 +131,7 @@ pip install -r requirements.txt
 python app.py                                   # la ventana
 python planilla_google.py "planilla.xlsx"       # revisar, sin navegador
 python bot.py --lento                           # el simulador, con los datos de ejemplo
-python bot.py "planilla.xlsx" --desde 01/10/2026 --real "https://sisge.abc.gob.ar/"
+python bot.py "planilla.xlsx" --desde 01/10/2026 --real "https://menu.abc.gob.ar/"
 python probar_selectores.py                     # los selectores contra las pantallas guardadas
 ```
 

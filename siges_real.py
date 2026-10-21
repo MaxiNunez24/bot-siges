@@ -523,7 +523,11 @@ def completar_encuesta(page, cfg, respirar=lambda: None, confirmar=True):
     _boton(page, 'Finalizar inscripción').click()
     if not confirmar:
         return [], respuestas
-    if not cerrar_avisos(page):
+    try:
+        cerro = cerrar_avisos(page)
+    except Exception as e:                              # noqa: BLE001  (las respuestas ya están: no se pierden)
+        return [f'Encuesta: no pude cerrar los avisos del final ({type(e).__name__}): cerralos vos'], respuestas
+    if not cerro:
         return ['Encuesta: después de "Finalizar inscripción" no apareció ningún aviso: confirmala vos'], respuestas
     return [], respuestas
 
@@ -538,27 +542,40 @@ def cerrar_avisos(page):
     entendido = _boton(page, 'Entendido')
     cualquiera = si.or_(entendido).first
     entendio = False
-    for vuelta in range(6):
+    for vuelta in range(8):
         if not (_aparece(cualquiera) if vuelta == 0 else _otro_aviso(page, cualquiera)):
             break
         if _visible(entendido):
-            boton, entendio = entendido.first, True
+            _tocar_el_de_arriba(page, entendido)
+            entendio = True
         else:
-            boton = si.first
-        boton.click()
-        _desaparece(boton, 5_000)
+            _tocar_el_de_arriba(page, si)
     return entendio
 
 
+def _tocar_el_de_arriba(page, botones):
+    """Toca el botón del cartel de más arriba y espera a que ese cartel se vaya.
+    A veces el SiGeS abre dos avisos a la vez, uno encima del otro ("Inscripción
+    finalizada" y "Estudiante asignado"): el de arriba es el último de la página, y
+    tocar el primero no anda, porque el de arriba lo tapa."""
+    antes = botones.count()
+    botones.last.click(timeout=10_000)
+    limite = time.monotonic() + 5
+    while botones.count() >= antes and time.monotonic() < limite:
+        page.wait_for_timeout(100)
+
+
 def cerrar_aviso_suelto(page):
-    """Si quedó abierto un aviso con "Entendido" (uno que llegó tarde), lo toca.
-    True si había uno."""
+    """Si quedó abierto algún aviso con "Entendido" (uno que llegó tarde), los toca,
+    del de arriba para abajo. True si había alguno."""
     entendido = _boton(page, 'Entendido')
-    if not _visible(entendido):
-        return False
-    entendido.first.click()
-    _desaparece(entendido.first, 5_000)
-    return True
+    hubo = False
+    for _ in range(4):
+        if not _visible(entendido):
+            break
+        _tocar_el_de_arriba(page, entendido)
+        hubo = True
+    return hubo
 
 
 def _otro_aviso(page, aviso, ms=15_000, despues_del_listado=3_000):

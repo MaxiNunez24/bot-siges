@@ -332,7 +332,7 @@ def cargar_todas(personas, ajustes, ui, page, esperar, respirar, cancelado, lent
         except Cancelado:
             raise
         except Exception as e:                          # noqa: BLE001
-            falta, respuestas = [f'Encuesta: {type(e).__name__}: {e}'], []
+            falta, respuestas = [f'Encuesta: {type(e).__name__}: {str(e).splitlines()[0][:150]}'], []
         registro['encuesta'] = ' | '.join(respuestas)
         ui.contar(f'   📝 Encuesta: {"; ".join(respuestas)}.', 'info')
         for f in falta:

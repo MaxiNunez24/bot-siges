@@ -254,14 +254,25 @@ class App(tk.Tk):
         self.lbl_columnas = ttk.Label(marco, text='', foreground='#555', wraplength=920, justify='left')
         self.lbl_columnas.pack(fill='x', pady=6)
 
+        # Los botones primero, pegados abajo: así el listado se achica y ellos no se aplastan.
+        abajo = ttk.Frame(marco)
+        abajo.pack(side='bottom', fill='x', pady=(8, 0))
+        ttk.Button(abajo, text='Tildar todos los que no son amarillos', command=self._tildar_listos).pack(side='left')
+        ttk.Button(abajo, text='Destildar todos', command=self._destildar).pack(side='left', padx=6)
+        self.lbl_cuenta = ttk.Label(abajo, text='')
+        self.lbl_cuenta.pack(side='right')
+
         tabla = ttk.Frame(marco)
         tabla.pack(fill='both', expand=True)
-        self.arbol = ttk.Treeview(tabla, columns=('marca', 'fila', 'quien', 'dni', 'estado', 'editar'),
-                                  show='headings', selectmode='none')
-        for col, titulo, ancho in (('marca', '✔', 40), ('fila', 'Fila', 50), ('quien', 'Apellido y nombre', 260),
-                                   ('dni', 'DNI', 100), ('estado', 'Estado', 420), ('editar', 'Editar', 60)):
+        self.arbol = ttk.Treeview(tabla, columns=('temporal', 'marca', 'fila', 'quien', 'dni', 'estado', 'editar'),
+                                  show='headings', selectmode='none', height=8)
+        # Solo "Estado" se estira o se achica con la ventana: las demás quedan enteras a la vista.
+        for col, titulo, ancho in (('temporal', 'Marca temporal', 150), ('marca', '✔', 40), ('fila', 'Fila', 50),
+                                   ('quien', 'Apellido y nombre', 220), ('dni', 'DNI', 95), ('estado', 'Estado', 280),
+                                   ('editar', 'Editar', 60)):
             self.arbol.heading(col, text=titulo)
-            self.arbol.column(col, width=ancho, anchor='center' if col in ('marca', 'fila', 'editar') else 'w')
+            self.arbol.column(col, width=ancho, stretch=col == 'estado',
+                              anchor='center' if col in ('temporal', 'marca', 'fila', 'editar') else 'w')
         self.arbol.tag_configure('amarilla', background='#fff3b0')
         self.arbol.tag_configure('problema', background='#f8d7da')
         barra = ttk.Scrollbar(tabla, orient='vertical', command=self.arbol.yview)
@@ -269,13 +280,6 @@ class App(tk.Tk):
         self.arbol.pack(side='left', fill='both', expand=True)
         barra.pack(side='right', fill='y')
         self.arbol.bind('<Button-1>', self._tocar_fila)
-
-        abajo = ttk.Frame(marco)
-        abajo.pack(fill='x', pady=(8, 0))
-        ttk.Button(abajo, text='Tildar todos los que no son amarillos', command=self._tildar_listos).pack(side='left')
-        ttk.Button(abajo, text='Destildar todos', command=self._destildar).pack(side='left', padx=6)
-        self.lbl_cuenta = ttk.Label(abajo, text='')
-        self.lbl_cuenta.pack(side='right')
 
     def _elegir(self):
         ruta = filedialog.askopenfilename(title='La planilla de inscripción',
@@ -348,7 +352,8 @@ class App(tk.Tk):
                 estado = '✏️ Editada · ' + estado
             quien = f'{datos["apellidos"]}, {datos["nombres"]}'.strip(', ')
             self.arbol.insert('', 'end', iid=str(i), tags=(tag,),
-                              values=('☑' if i in self.marcadas else '☐', numero, quien, datos['dni'] or '', estado, '✏️'))
+                              values=(self.origen[i].get('marca_temporal', ''), '☑' if i in self.marcadas else '☐',
+                                      numero, quien, datos['dni'] or '', estado, '✏️'))
         if self.filas:
             self.lbl_rango.configure(text=f'De {self._describir(a)}  a  {self._describir(b)}  '
                                           f'({b - a + 1} de {len(self.filas)} filas)')
@@ -403,7 +408,8 @@ class App(tk.Tk):
         if not iid:
             return
         i = int(iid)
-        if self.arbol.identify_column(evento.x) == '#6':
+        columna = self.arbol.identify_column(evento.x)
+        if columna and self.arbol.column(columna, 'id') == 'editar':
             self._editar(i)
             return
         if self.filas[i][2]:
@@ -441,8 +447,9 @@ class App(tk.Tk):
 
         def mostrar(*_):
             datos, problemas = normalizar.normalizar_fila(nueva())
+            lugar = datos['lugar_siges'] or f'{self.ajustes["config"]["distrito"]} (el de Opciones)'
             texto = (f'Se carga así →  Calle: {datos["calle"] or "—"}  ·  Altura: {datos["altura"]}  ·  '
-                     f'Entre calles: {datos["entre_calles"] or "—"}')
+                     f'Entre calles: {datos["entre_calles"] or "—"}\nDistrito y Localidad: {lugar}')
             texto += ('\n⛔ ' + '; '.join(problemas)) if problemas else '\n✅ Sin problemas: se puede cargar.'
             vista.configure(text=texto, foreground='#a12622' if problemas else '#1f5f8b')
 
@@ -507,7 +514,16 @@ class App(tk.Tk):
         adentro = lienzo.create_window(0, 0, window=marco, anchor='nw')
         marco.bind('<Configure>', lambda e: lienzo.configure(scrollregion=lienzo.bbox('all')))
         lienzo.bind('<Configure>', lambda e: lienzo.itemconfigure(adentro, width=e.width))
-        rueda = lambda e: lienzo.yview_scroll(-1 if e.delta > 0 else 1, 'units')   # noqa: E731
+        def rueda(e):
+            if isinstance(e.widget, tk.Text):           # la lista de palabras se mueve sola, no la página
+                return
+            lienzo.yview_scroll(-1 if e.delta > 0 else 1, 'units')
+
+        # La rueda sobre un menú o un número les cambia el valor sin que nadie lo note
+        # (al bajar por la página, "Colectivo" pasaba a "Taxi/Remis"): ahí mueve la página.
+        for clase in ('TCombobox', 'TSpinbox'):
+            self.unbind_class(clase, '<MouseWheel>')
+
         afuera.bind('<Enter>', lambda e: self.bind_all('<MouseWheel>', rueda))
         afuera.bind('<Leave>', lambda e: self.unbind_all('<MouseWheel>'))
         cfg = self.ajustes['config']
@@ -532,6 +548,10 @@ class App(tk.Tk):
             ttk.Label(lugar, text=texto + ':').grid(row=0, column=col * 2, sticky='w')
             self.v[clave] = tk.StringVar(value=cfg[clave])
             ttk.Entry(lugar, textvariable=self.v[clave], width=22).grid(row=0, column=col * 2 + 1, padx=6)
+        ttk.Label(lugar, foreground='#555', text=(
+            'Distrito y Localidad salen de la planilla: Ensenada o Punta Lara → Ensenada; La Plata o Berisso → '
+            'La Plata. Estos se usan solo si la planilla no dice ninguna.')).grid(
+            row=1, column=0, columnspan=6, sticky='w', pady=(4, 0))
 
         self.v['valores_fijos'] = tk.BooleanVar(value=cfg['valores_fijos'])
         fijos = ttk.LabelFrame(marco, padding=10, labelwidget=ttk.Checkbutton(
@@ -587,6 +607,9 @@ class App(tk.Tk):
         self.palabras = tk.Text(encuesta, width=24, height=5, font=FUENTE)
         self.palabras.insert('1.0', '\n'.join(cfg['encuesta_palabras']))
         self.palabras.grid(row=0, column=1, sticky='nsew', padx=(10, 0))
+        barra_palabras = ttk.Scrollbar(encuesta, orient='vertical', command=self.palabras.yview)
+        self.palabras.configure(yscrollcommand=barra_palabras.set)
+        barra_palabras.grid(row=0, column=2, sticky='ns')
 
         abajo = ttk.Frame(marco)
         abajo.pack(fill='x', pady=10)

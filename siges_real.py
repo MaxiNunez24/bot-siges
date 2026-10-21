@@ -530,8 +530,9 @@ def llenar_direccion(page, datos, cfg, respirar, agregar=True):
         _campo(page, 'codigo_postal').fill(str(cfg['codigo_postal']))
         respirar()
     falta = []
+    # Lo que dice la planilla (Punta Lara → Ensenada, Berisso → La Plata…); si no, lo de Opciones.
     for rotulo, clave in (('Distrito', 'distrito'), ('Localidad', 'localidad')):
-        ok, detalle = _buscador(page, rotulo, cfg[clave])
+        ok, detalle = _buscador(page, rotulo, datos.get('lugar_siges') or cfg[clave])
         if not ok:
             falta.append(detalle)
         respirar()

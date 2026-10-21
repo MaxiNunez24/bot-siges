@@ -55,8 +55,10 @@ La ventana tiene cuatro pestañas, en orden:
    - las que tienen un **problema en los datos** aparecen en rojo con el motivo, y no se pueden
      tildar hasta corregirlas;
    - el lápiz ✏️ de cada fila abre sus datos para corregirlos ahí mismo (con confirmación). Muestra
-     cómo se va a cargar el domicilio (calle, altura, entre calles). La planilla no se toca: los
-     cambios quedan en el programa hasta que se vuelva a importar;
+     cómo se va a cargar el domicilio (calle, altura, entre calles). Los cambios se guardan también
+     en el archivo de la planilla (.xlsx o .csv), sin tocar los colores; la primera vez queda una
+     copia de respaldo al lado, "inscriptos (antes de editar).xlsx". Si el archivo está abierto en
+     Excel no se puede escribir: avisa y el cambio queda solo en el programa;
    - se puede filtrar por fecha de inscripción;
    - **rango**: "Cargar desde … hasta …" acepta número de fila, DNI, apellido o nombre de la
      primera y la última persona, o se mueven los dos extremos del deslizador. Solo se carga lo

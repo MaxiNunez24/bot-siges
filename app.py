@@ -38,7 +38,8 @@ LOS PASOS
       · Las que tienen un problema (un DNI raro, una fecha imposible) aparecen en
         rojo, con el motivo, y no se pueden tildar hasta corregirlas.
       · Para corregir los datos de alguien, tocá el lápiz ✏️ de su fila. Los
-        cambios quedan en el programa: la planilla no se toca.
+        cambios se guardan también en el archivo de la planilla (la primera vez
+        queda una copia de respaldo al lado, "(antes de editar)").
     Tildá y destildá a quién cargar.
       · Para cargar solo una parte: en "Cargar desde … hasta …" escribí la fila,
         el DNI, el apellido o el nombre de la primera y la última persona, o
@@ -424,8 +425,9 @@ class App(tk.Tk):
 
     def _editar(self, i):
         """Una ventana para corregir los datos de la fila i. Muestra en vivo cómo se
-        van a cargar, y antes de guardar pide confirmar cada cambio. La planilla
-        no se toca: los cambios quedan en el programa hasta que se importe de nuevo."""
+        van a cargar, y antes de guardar pide confirmar cada cambio. Los cambios se
+        escriben también en el archivo de la planilla (con una copia de respaldo la
+        primera vez: ver planilla_google.guardar_cambios)."""
         cruda = self.origen[i]
         campos = [(clave, rotulo) for clave, rotulo in CAMPOS_EDITABLES if clave in cruda]
         ventana = tk.Toplevel(self)
@@ -469,10 +471,21 @@ class App(tk.Tk):
                 ventana.destroy()
                 return
             detalle = '\n'.join(f'{rotulo}: "{antes}" → "{despues}"' for rotulo, antes, despues in cambios)
+            archivo = self.ruta.replace('\\', '/').split('/')[-1]
             if not messagebox.askyesno('Confirmar los cambios', f'Fila {cruda["_fila"]}:\n\n{detalle}\n\n'
-                                       'Los cambios quedan en el programa (la planilla no se toca). ¿Los guardo?',
+                                       f'Se guardan también en la planilla ({archivo}). La primera vez se hace '
+                                       'una copia de respaldo al lado, "(antes de editar)". ¿Los guardo?',
                                        parent=ventana):
                 return
+            nuevos = {clave: valores[clave].get().strip() for clave, _ in campos
+                      if (cruda.get(clave) or '') != valores[clave].get().strip()}
+            try:
+                planilla_google.guardar_cambios(self.ruta, cruda['_fila'], nuevos)
+            except Exception as e:                      # noqa: BLE001
+                messagebox.showwarning('No se guardó en la planilla',
+                                       f'No pude escribir el cambio en {archivo}:\n\n{e}\n\n'
+                                       'Quedó solo en el programa: se pierde si volvés a importar la planilla.',
+                                       parent=ventana)
             cruda.update(nueva())
             cruda['_editada'] = True
             self._interpretar(i)

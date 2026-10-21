@@ -285,6 +285,87 @@ def todas(ruta, hoja=None):
     return [(str(e), columnas.get(i)) for i, e in enumerate(encabezados) if e], filas, faltan
 
 
+def _como_celda(nuevo, viejo):
+    """El texto editado, con el tipo que tenía la celda: si el DNI era un número
+    sigue siendo número, y si la fecha era fecha sigue siendo fecha."""
+    if nuevo == '':
+        return None
+    if isinstance(viejo, bool):
+        return nuevo
+    if isinstance(viejo, (int, float)) and nuevo.isdigit():
+        return int(nuevo)
+    if isinstance(viejo, datetime):
+        for formato in ('%d/%m/%Y %H:%M:%S', '%d/%m/%Y'):
+            try:
+                return datetime.strptime(nuevo, formato)
+            except ValueError:
+                pass
+    if isinstance(viejo, date):
+        fecha = a_fecha(nuevo)
+        if fecha:
+            return fecha
+    return nuevo
+
+
+def respaldar(ruta):
+    """Antes del primer cambio, una copia del archivo tal como estaba:
+    "inscriptos (antes de editar).xlsx". Si ya existe, no se pisa."""
+    import pathlib
+    import shutil
+    original = pathlib.Path(ruta)
+    copia = original.with_name(f'{original.stem} (antes de editar){original.suffix}')
+    if not copia.exists():
+        shutil.copy2(original, copia)
+    return copia
+
+
+def guardar_cambios(ruta, numero_de_fila, cambios, hoja=None):
+    """Escribe en el archivo de la planilla los cambios de una fila hechos en la
+    aplicación. `cambios` es {clave: texto nuevo} (las claves de normalizar.py);
+    las columnas se encuentran igual que al leer. En un .xlsx solo cambia el valor
+    de esas celdas: los colores (las filas amarillas) y lo demás quedan como estaban.
+
+    Si el archivo está abierto en Excel, Windows no deja escribirlo: el error sube
+    con un mensaje en castellano."""
+    respaldar(ruta)
+    try:
+        if ruta.lower().endswith('.csv'):
+            import csv
+            with open(ruta, 'rb') as f:
+                con_bom = f.read(3) == b'\xef\xbb\xbf'
+            with open(ruta, encoding='utf-8-sig', newline='') as f:
+                filas = list(csv.reader(f))
+            columnas = _columnas_de(filas[0] if filas else [])
+            fila = filas[numero_de_fila - 1]
+            for clave, valor in cambios.items():
+                i = columnas[clave]
+                fila.extend([''] * (i + 1 - len(fila)))
+                fila[i] = valor
+            with open(ruta, 'w', encoding='utf-8-sig' if con_bom else 'utf-8', newline='') as f:
+                csv.writer(f).writerows(filas)
+        else:
+            import openpyxl
+            libro = openpyxl.load_workbook(ruta)
+            ws = libro[hoja] if hoja else libro.worksheets[0]
+            columnas = _columnas_de([c.value for c in ws[1]])
+            for clave, valor in cambios.items():
+                celda = ws.cell(row=numero_de_fila, column=columnas[clave] + 1)
+                celda.value = _como_celda(valor, celda.value)
+            libro.save(ruta)
+    except PermissionError:
+        raise RuntimeError('Windows no deja escribir el archivo: ¿está abierto en Excel? Cerralo y probá de nuevo.')
+
+
+def _columnas_de(encabezados):
+    """{clave: índice de columna}, con las mismas reglas que al leer."""
+    columnas = {}
+    for i, enc in enumerate(encabezados):
+        clave = clave_de(enc, set(columnas))
+        if clave:
+            columnas[clave] = i
+    return columnas
+
+
 def main():
     ap = argparse.ArgumentParser(description='Lee la planilla de Google bajada como .xlsx.')
     ap.add_argument('xlsx')

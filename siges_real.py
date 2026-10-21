@@ -37,11 +37,18 @@ opciones; las cuatro preguntas Si/No en No; nivel de contenidos y experiencia en
 "Finalizar inscripción". En modo demo la confirmación ("Si" y "Entendido") la
 hace la preceptora; si no, también el bot.
 
+Guardar el formulario (decisión del 21/10)
+------------------------------------------
+Fuera del modo demo el bot toca "Guardar estudiante" y sigue solo con la
+encuesta. Lo obligatorio lo controla el SiGeS: deja el botón deshabilitado
+mientras falte algo, y entonces frena para la preceptora. En modo demo guarda
+la preceptora.
+
 Lo que este módulo NO hace nunca
 --------------------------------
 Iniciar sesión · tocar salud, discapacidad, restricción judicial, redes o
-programas sociales · pisar los datos de alguien ya cargado · guardar el
-formulario "Agregar estudiante" · "Generar matrícula inicial".
+programas sociales · pisar los datos de alguien ya cargado · "Generar matrícula
+inicial".
 """
 import random
 import re
@@ -63,7 +70,7 @@ CONFIG_INICIAL = {
     # En orden: gana el primero que aparece (ver normalizar.lugar_siges).
     'lugares': [['Punta Lara', 'Ensenada', '1931'], ['Ensenada', 'Ensenada', '1925'],
                 ['Berisso', 'Berisso', '1923'], ['La Plata', 'La Plata', '1900']],
-    'valores_fijos': False,
+    'valores_fijos': True,
     'transporte': 'Colectivo',
     'whatsapp': True,
     'vivienda_zona': 'zona urbana',
@@ -431,6 +438,22 @@ def completar(page, datos, respirar=lambda: None, config=None, trabado=None):
     return True, pendientes, fijos
 
 
+def guardar_formulario(page):
+    """Toca "Guardar estudiante". Devuelve (ok, motivo): ok si apareció la encuesta,
+    que es lo que muestra el SiGeS cuando acepta el formulario."""
+    boton = _boton(page, 'Guardar estudiante')
+    if boton.count() != 1:
+        return False, f'esperaba UN botón "Guardar estudiante" y hay {boton.count()}'
+    # El SiGeS lo deja deshabilitado mientras falte algo obligatorio.
+    if not boton.is_enabled():
+        _resaltar(page, 'Guardar estudiante')
+        return False, '"Guardar estudiante" está deshabilitado: falta algo obligatorio'
+    boton.click()
+    if not _aparece(_boton(page, 'Finalizar inscripción')):
+        return False, 'toqué "Guardar estudiante" pero no apareció la encuesta'
+    return True, ''
+
+
 def hay_encuesta(page):
     return _visible(_boton(page, 'Finalizar inscripción'))
 
@@ -487,15 +510,32 @@ def completar_encuesta(page, cfg, respirar=lambda: None, confirmar=True):
     _boton(page, 'Finalizar inscripción').click()
     if not confirmar:
         return [], respuestas
-    si = page.get_by_role('button', name=re.compile(r'^\s*s[ií]\s*$', re.IGNORECASE))
-    if not _aparece(si):
-        return ['Encuesta: no apareció "¿Desea finalizar la inscripción?": confirmala vos'], respuestas
-    si.first.click()
-    entendido = _boton(page, 'Entendido')
-    if not _aparece(entendido):
-        return ['Encuesta: no apareció "Inscripción finalizada correctamente"'], respuestas
-    entendido.click()
+    if not cerrar_avisos(page):
+        return ['Encuesta: después de "Finalizar inscripción" no apareció ningún aviso: confirmala vos'], respuestas
     return [], respuestas
+
+
+def cerrar_avisos(page):
+    """Contesta los carteles que vienen después de "Finalizar inscripción", vengan
+    como vengan: "¿Desea finalizar la inscripción?" → Si, "Inscripción finalizada
+    correctamente" → Entendido, o directamente "Alerta: Estudiante asignado
+    correctamente" → Entendido (pasa con quien ya estaba en el centro). Toca "Si" o
+    "Entendido" hasta que no aparezca ningún otro. True si llegó a un "Entendido"."""
+    si = page.get_by_role('button', name=re.compile(r'^\s*s[ií]\s*$', re.IGNORECASE))
+    entendido = _boton(page, 'Entendido')
+    cualquiera = si.or_(entendido).first
+    entendio = False
+    for vuelta in range(4):
+        # El primero puede tardar (el SiGeS guarda); los siguientes vienen enseguida.
+        if not _aparece(cualquiera, None if vuelta == 0 else 4_000):
+            break
+        if _visible(entendido):
+            boton, entendio = entendido.first, True
+        else:
+            boton = si.first
+        boton.click()
+        _desaparece(boton, 5_000)
+    return entendio
 
 
 def _visible(loc):

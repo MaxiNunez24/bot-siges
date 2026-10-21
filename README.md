@@ -62,8 +62,9 @@ La ventana tiene cuatro pestañas, en orden:
      primera y la última persona, o se mueven los dos extremos del deslizador. Solo se carga lo
      que queda a la vista;
    - **Buscar en cualquier columna** achica el listado mientras se escribe.
-3. **Opciones**: la dirección del SiGeS, el **modo demo** (después de cada persona pregunta si
-   quedó bien cargada), y los **valores fijos** para lo que la planilla todavía no pregunta
+3. **Opciones**: la dirección del SiGeS, el **modo demo** (frena en cada persona: guardás vos y
+   después pregunta si quedó bien cargada; viene apagado), **despacio** (también apagado), y los
+   **valores fijos** (vienen prendidos) para lo que la planilla todavía no pregunta
    (transporte, WhatsApp, vivienda). Una **tabla de lugares** editable: qué texto de la planilla
    lleva a qué Distrito y Localidad y con qué código postal (de fábrica: Punta Lara → Ensenada
    1931, Ensenada → Ensenada 1925, Berisso → Berisso 1923, La Plata → La Plata 1900); si la
@@ -73,9 +74,10 @@ La ventana tiene cuatro pestañas, en orden:
 4. **Cargar**: se abre una ventana de navegador **aparte** (no usa tus pestañas ni tus contraseñas
    guardadas), en **menu.abc.gob.ar**: **iniciás sesión vos** ahí, aunque ya tengas el SiGeS abierto
    en tu Chrome de siempre, entrás al SiGeS y abrís el listado del trayecto. Desde
-   ahí el bot, por cada persona, toca **+**, busca el DNI, completa, y espera a que revises y
-   apretes "Guardar estudiante". Después **completa la encuesta** y finaliza la inscripción (en
-   **modo demo**, el "Si" y el "Entendido" del final los tocás vos). Si la persona **ya está en el
+   ahí el bot, por cada persona, toca **+**, busca el DNI, completa, **guarda**, completa la
+   **encuesta**, finaliza la inscripción y sigue con la próxima: **todo solo**. Si el SiGeS no
+   deja guardar (falta algo obligatorio), frena para que lo completes y guardes vos. En **modo demo** frena en cada
+   persona: guardás vos, y el "Si" y el "Entendido" del final también. Si la persona **ya está en el
    centro** en otro curso, elige "Datos del estudiante actual" (nunca RENAPER) y hace la encuesta.
    **⏹ Cancelar la carga** la frena en
    cualquier momento sin cerrar el programa (deja el resumen de lo hecho hasta ahí).
@@ -104,8 +106,9 @@ vez instala lo necesario, y abre la misma ventana.
 ## Lo que el bot NO hace, a propósito
 
 1. **No inicia sesión.** La sesión la abre una persona; el bot no tiene ni pide contraseñas.
-2. **No guarda el formulario y nunca genera la matrícula inicial.** Completa, para y espera a que
-   lo guardes vos. La encuesta del final sí la completa (decisión del 21/10): la razón y cómo se
+2. **Nunca genera la matrícula inicial.** Fuera del modo demo **guarda el formulario solo** (decisión
+   del 21/10); si el SiGeS no lo deja (falta algo obligatorio), frena y guardás vos. La
+   encuesta del final también la completa (decisión del 21/10): la razón y cómo se
    enteró al azar, las preguntas Si/No en No, "Muy bueno" en las opiniones y una palabra de la lista
    de Opciones.
 3. **No pisa a nadie.** Si el DNI ya tenía datos cargados, no toca nada y avisa qué difiere.

@@ -42,7 +42,7 @@ URL_VIEJA = 'https://sisge.abc.gob.ar/'
 
 def cargar_ajustes():
     """Lo que se eligió en Opciones la última vez (o lo de fábrica)."""
-    base = {'url': URL_INICIAL, 'demo': True, 'lento': True, 'simulador': False,
+    base = {'url': URL_INICIAL, 'demo': False, 'lento': False, 'simulador': False,
             'config': dict(siges_real.CONFIG_INICIAL)}
     try:
         guardado = json.loads(AJUSTES.read_text(encoding='utf-8'))
@@ -301,6 +301,25 @@ def cargar_todas(personas, ajustes, ui, page, esperar, respirar, cancelado, lent
                 return False
             texto = f'{nombre} sigue abierto. Arreglalo, tocá "Agregar" en el SiGeS y después el botón de acá.'
 
+    def guardar(page, pendientes):
+        """Fuera del modo demo toca "Guardar estudiante", aunque haya quedado algo sin
+        completar: lo obligatorio lo controla el SiGeS, que deja el botón deshabilitado
+        mientras falte. True si lo aceptó (apareció la encuesta)."""
+        if ajustes.get('demo'):
+            return False
+        try:
+            guardado, motivo = siges_real.guardar_formulario(page)
+        except Cancelado:
+            raise
+        except Exception as e:                          # noqa: BLE001
+            guardado, motivo = False, f'{type(e).__name__}: {e}'
+        if guardado:
+            ui.contar('   💾 Guardé el formulario.' + (' Lo que quedó sin completar no era obligatorio.'
+                                                       if pendientes else ''), 'ok')
+        else:
+            ui.contar(f'   ⚠️ No pude guardar: {motivo}. Revisá el formulario.', 'aviso')
+        return guardado
+
     def encuesta(page, registro):
         """Si está abierta la encuesta, la completa (en modo demo sin confirmar el
         final). True si quedó todo terminado, confirmación incluida."""
@@ -399,8 +418,7 @@ def cargar_todas(personas, ajustes, ui, page, esperar, respirar, cancelado, lent
                 page = esperar('Resolvé lo marcado con ⛔ en el SiGeS. Cuando vuelvas al listado del '
                                'trayecto, tocá el botón.', 'Siguiente')
             else:
-                if en_el_centro is None:
-                    # El formulario lo guarda siempre la preceptora; la encuesta aparece después.
+                if en_el_centro is None and not guardar(page, pendientes):
                     page = esperar('Revisá el formulario, completá lo marcado en amarillo y apretá "Guardar '
                                    'estudiante". Cuando aparezca la encuesta, tocá el botón: la completo yo.',
                                    'Ya guardé, seguir')

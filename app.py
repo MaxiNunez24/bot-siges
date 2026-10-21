@@ -4,8 +4,8 @@
 
 Las decisiones las toma la preceptora, en la ventana: a quién se carga, con qué
 valores se completa lo que la planilla no trae, y cuándo se sigue con la
-próxima persona. El bot nunca guarda el formulario y nunca toca "Generar
-matrícula inicial". La encuesta del final sí la completa (ver siges_real.py).
+próxima persona. Fuera del modo demo el bot guarda el formulario y completa la
+encuesta solo; nunca toca "Generar matrícula inicial" (ver siges_real.py).
 """
 import queue
 import threading
@@ -51,10 +51,11 @@ LOS PASOS
 4.  Pestaña "Cargar": tocá Empezar. Se abre una ventana de navegador APARTE (Chrome,
     si está), en el menú de ABC: iniciá sesión VOS ahí, aunque ya tengas el SiGeS
     abierto en tu Chrome de siempre, entrá al SiGeS y abrí el listado del trayecto. Desde ahí, por cada persona, el bot busca el DNI y
-    completa. Vos revisás, completás lo marcado en amarillo, apretás "Guardar
-    estudiante" y tocás "Ya guardé, seguir": la encuesta la completa el bot y
-    finaliza la inscripción. En modo demo, el "Si" y el "Entendido" del final
-    los tocás vos.
+    completa, guarda, hace la encuesta y finaliza la inscripción, y sigue con la
+    próxima persona: todo solo. Si el SiGeS no deja guardar porque falta algo
+    obligatorio, frena para que lo completes y guardes vos ("Ya guardé, seguir").
+    En MODO DEMO frena en cada persona: guardás vos, y el "Si" y el "Entendido"
+    del final también.
     Si la persona ya está en el centro (en otro curso), el SiGeS no abre el
     formulario: el bot elige "Datos del estudiante actual" y hace la encuesta.
     Si hace falta frenar, "Cancelar la carga": no hay que cerrar el programa.
@@ -66,7 +67,7 @@ LOS PASOS
 LO QUE EL BOT NO HACE NUNCA
 
   · Iniciar sesión, ni ver tu contraseña.
-  · Guardar el formulario, o "Generar matrícula inicial".
+  · "Generar matrícula inicial".
   · Pisar los datos de alguien que ya estaba cargado: te avisa qué difiere.
   · Tocar salud, discapacidad o restricción judicial.
 
@@ -738,8 +739,11 @@ class App(tk.Tk):
                 return
             if not messagebox.askyesno('Sistema REAL del Ministerio',
                                        f'Esto va contra el SiGeS REAL, con {len(elegidas)} persona(s).\n\n'
-                                       'El bot completa y para: el formulario lo guardás vos. La encuesta la '
-                                       'completa el bot y finaliza la inscripción.\n\n¿Seguimos?'):
+                                       + ('Modo demo: el bot completa y para; el formulario lo guardás vos.'
+                                          if ajustes['demo'] else
+                                          'El bot completa, GUARDA, hace la encuesta y finaliza la inscripción de '
+                                          'cada persona, solo. Frena solo si el SiGeS no deja guardar.')
+                                       + '\n\n¿Seguimos?'):
                 return
         self.corriendo = True
         self.cancelar.clear()

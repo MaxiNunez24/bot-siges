@@ -430,6 +430,8 @@ def cargar_todas(personas, ajustes, ui, page, esperar, respirar, cancelado, lent
                                    'tocá el botón.', 'Siguiente')
             # Que "Siguiente" no deje seguir con el formulario todavía abierto.
             while not siges_real.en_el_listado(page):
+                if siges_real.cerrar_aviso_suelto(page):    # un "Entendido" que llegó tarde
+                    continue
                 if esperando(page.context, ui.preguntar,
                              f'No veo el listado del trayecto: el formulario de {quien} parece seguir '
                              f'abierto (¿no se guardó?).\n\n¿Paso igual a la próxima persona? '

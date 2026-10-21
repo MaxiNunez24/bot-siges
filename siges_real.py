@@ -52,6 +52,7 @@ inicial".
 """
 import random
 import re
+import time
 import unicodedata
 
 import normalizar
@@ -287,6 +288,7 @@ def buscar_dni(page, dni):
     centro: el SiGeS pregunta si usar sus datos actuales o los de RENAPER, y
     después va directo a la encuesta) o None si no se pudo (el motivo en `detalle`).
     """
+    cerrar_aviso_suelto(page)                           # el "Entendido" de la persona anterior, si llegó tarde
     mas = page.locator('button:has(mat-icon:text-is("add"))')
     if mas.count() != 1:
         return None, f'esperaba UN botón "+" y hay {mas.count()}: ¿está abierto el listado del trayecto?'
@@ -536,9 +538,8 @@ def cerrar_avisos(page):
     entendido = _boton(page, 'Entendido')
     cualquiera = si.or_(entendido).first
     entendio = False
-    for vuelta in range(4):
-        # El primero puede tardar (el SiGeS guarda); los siguientes vienen enseguida.
-        if not _aparece(cualquiera, None if vuelta == 0 else 4_000):
+    for vuelta in range(6):
+        if not (_aparece(cualquiera) if vuelta == 0 else _otro_aviso(page, cualquiera)):
             break
         if _visible(entendido):
             boton, entendio = entendido.first, True
@@ -547,6 +548,31 @@ def cerrar_avisos(page):
         boton.click()
         _desaparece(boton, 5_000)
     return entendio
+
+
+def cerrar_aviso_suelto(page):
+    """Si quedó abierto un aviso con "Entendido" (uno que llegó tarde), lo toca.
+    True si había uno."""
+    entendido = _boton(page, 'Entendido')
+    if not _visible(entendido):
+        return False
+    entendido.first.click()
+    _desaparece(entendido.first, 5_000)
+    return True
+
+
+def _otro_aviso(page, aviso, ms=15_000, despues_del_listado=3_000):
+    """¿Viene otro cartel? El último ("Estudiante asignado correctamente") puede
+    tardar, mientras el SiGeS recarga el listado. Se espera hasta `ms`; si ya se
+    volvió al listado, solo un poco más (`despues_del_listado`), por las dudas."""
+    limite = time.monotonic() + ms / 1000
+    while time.monotonic() < limite:
+        if _visible(aviso):
+            return True
+        if en_el_listado(page):
+            limite = min(limite, time.monotonic() + despues_del_listado / 1000)
+        page.wait_for_timeout(250)
+    return False
 
 
 def _visible(loc):

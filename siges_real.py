@@ -343,7 +343,40 @@ def usar_datos_actuales(page):
     True si se cerró el cartel y apareció la encuesta."""
     actual, _ = _carteles_renaper(page)
     actual.click()
-    return _aparece(_boton(page, 'Finalizar inscripción'))
+    return _esperar_entre_avisos(page, _boton(page, 'Finalizar inscripción'))
+
+
+def vigilar_alerta_de_guardado(page):
+    """La alerta "Estudiante cargado correctamente" que aparece al guardar puede
+    llegar en cualquier momento y tapar la encuesta. Playwright la vigila: cada vez
+    que se interpone antes de un clic, toca su "Entendido" y sigue. (Los avisos del
+    final los maneja cerrar_avisos, que necesita verlos.) Se registra una vez por pestaña."""
+    if getattr(page, '_alerta_vigilada', False):
+        return
+    page.add_locator_handler(page.get_by_text(re.compile(r'Estudiante cargado correctamente', re.IGNORECASE)),
+                             lambda *_: cerrar_aviso_suelto(page))
+    page._alerta_vigilada = True
+
+
+def _esperar_entre_avisos(page, buscado, ms=None):
+    """Espera a que aparezca `buscado` cerrando, mientras tanto, los avisos que se
+    crucen. Al guardar, el SiGeS muestra "Alerta: Estudiante cargado correctamente"
+    encima de la encuesta, y hasta tocar su "Entendido" no se puede seguir. True si
+    `buscado` quedó a la vista sin ningún aviso encima."""
+    entendido = _boton(page, 'Entendido')
+    limite = time.monotonic() + (ms or ESPERA_MS) / 1000
+    while time.monotonic() < limite:
+        if _visible(entendido):
+            _tocar_el_de_arriba(page, entendido)
+            continue
+        if _visible(buscado):
+            # Un aviso puede llegar justo después que la encuesta: se mira un momento más.
+            page.wait_for_timeout(300)
+            if not _visible(entendido):
+                return True
+            continue
+        page.wait_for_timeout(100)
+    return False
 
 
 def ya_tiene_datos(page, datos):
@@ -461,8 +494,9 @@ def guardar_formulario(page):
     if not boton.is_enabled():
         _resaltar(page, 'Guardar estudiante')
         return False, '"Guardar estudiante" está deshabilitado: falta algo obligatorio'
+    vigilar_alerta_de_guardado(page)
     boton.click()
-    if not _aparece(_boton(page, 'Finalizar inscripción')):
+    if not _esperar_entre_avisos(page, _boton(page, 'Finalizar inscripción')):
         return False, 'toqué "Guardar estudiante" pero no apareció la encuesta'
     return True, ''
 
@@ -481,6 +515,7 @@ def completar_encuesta(page, cfg, respirar=lambda: None, confirmar=True):
     """
     cfg = {**CONFIG_INICIAL, **(cfg or {})}
     falta, respuestas = [], []
+    cerrar_aviso_suelto(page)                           # por si quedó una alerta encima de la encuesta
     # Los tres menús se llaman igual ("razon"): van en este orden.
     menus = page.locator('mat-select[name="razon"]')
     if menus.count() != 3:
@@ -557,9 +592,15 @@ def _tocar_el_de_arriba(page, botones):
     """Toca el botón del cartel de más arriba y espera a que ese cartel se vaya.
     A veces el SiGeS abre dos avisos a la vez, uno encima del otro ("Inscripción
     finalizada" y "Estudiante asignado"): el de arriba es el último de la página, y
-    tocar el primero no anda, porque el de arriba lo tapa."""
-    antes = botones.count()
-    botones.last.click(timeout=10_000)
+    tocar el primero no anda, porque el de arriba lo tapa.
+
+    El clic se hace sobre el botón mismo (como lo haría la página), sin esperar a
+    que el cartel termine de aparecer: así se cierra apenas está, y no choca con la
+    vigilancia de la alerta de guardado (ver vigilar_alerta_de_guardado)."""
+    # Sin esperar a ningún botón: si justo se cerró solo, no hay nada que tocar.
+    antes = botones.evaluate_all('bs => { const b = bs[bs.length - 1]; if (b) b.click(); return bs.length; }')
+    if not antes:
+        return
     limite = time.monotonic() + 5
     while botones.count() >= antes and time.monotonic() < limite:
         page.wait_for_timeout(100)
@@ -578,7 +619,7 @@ def cerrar_aviso_suelto(page):
     return hubo
 
 
-def _otro_aviso(page, aviso, ms=15_000, despues_del_listado=3_000):
+def _otro_aviso(page, aviso, ms=15_000, despues_del_listado=2_000):
     """¿Viene otro cartel? El último ("Estudiante asignado correctamente") puede
     tardar, mientras el SiGeS recarga el listado. Se espera hasta `ms`; si ya se
     volvió al listado, solo un poco más (`despues_del_listado`), por las dudas."""
@@ -588,7 +629,7 @@ def _otro_aviso(page, aviso, ms=15_000, despues_del_listado=3_000):
             return True
         if en_el_listado(page):
             limite = min(limite, time.monotonic() + despues_del_listado / 1000)
-        page.wait_for_timeout(250)
+        page.wait_for_timeout(100)
     return False
 
 

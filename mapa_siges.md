@@ -104,7 +104,7 @@ selector del bot encuentre **exactamente un** elemento.
 | 5 | Sub-form **Vivienda** | `vivienda` = zona rural / urbana / contexto de encierro; `cuantas_personas`, `cuantos_adultos`, `cuantos_ninios`; `hijos`, `extranjera`, `indigena`, `originarios` = `true`/`false` |
 | 6 | Sub-form **Contacto** | `tipo_de_contacto` (`mat-select`: Celular…), `valor` (el número), `con_whatsapp` = `true`/`false`, `descripcion` |
 | 7 | Sub-form **Educación** | `max_nivel_alcanzado` (`mat-select`), `cursando`, `completo`, `orientacion` (`mat-select`), `intencion_de_finalizacion` |
-| 8 | Guardar estudiante | Queda **deshabilitado** hasta que el formulario está completo. Fuera del modo demo lo toca el bot (decisión del 21/10); si está deshabilitado, frena para la preceptora |
+| 8 | Guardar estudiante | Queda **deshabilitado** hasta que el formulario está completo. Fuera del modo demo lo toca el bot (decisión del 21/10); si está deshabilitado, frena para la preceptora. Al guardar aparece *"Alerta: Estudiante cargado correctamente"* → Entendido, encima de la encuesta y a veces un poco después: el bot la cierra apenas aparece |
 | 9 | 🆕 **Encuesta** | Por qué se inscribió, cómo imagina el nivel y la experiencia, una palabra de lo que espera, cómo se enteró… → **Finalizar inscripción** / Cancelar inscripción |
 | 10 | Confirmación | *"¿Desea Finalizar la inscripción?"* → Si |
 | 11 | Aviso | *"Inscripción finalizada correctamente."* → Entendido. A veces viene directo *"Alerta: Estudiante asignado correctamente."* → Entendido, sin la confirmación (10): el bot toca "Si" o "Entendido" según lo que aparezca |

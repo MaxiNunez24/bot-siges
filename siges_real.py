@@ -47,6 +47,8 @@ import random
 import re
 import unicodedata
 
+import normalizar
+
 # El tiempo que se le da a cada pantalla para aparecer. Es un sistema del
 # Ministerio, con días lentos: mejor esperar de más que fallar por apurado.
 ESPERA_MS = 20_000
@@ -57,6 +59,10 @@ CONFIG_INICIAL = {
     'distrito': 'Ensenada',
     'localidad': 'Ensenada',
     'codigo_postal': '1925',
+    # Lo que dice la planilla → Distrito y Localidad del SiGeS, y código postal.
+    # En orden: gana el primero que aparece (ver normalizar.lugar_siges).
+    'lugares': [['Punta Lara', 'Ensenada', '1931'], ['Ensenada', 'Ensenada', '1925'],
+                ['Berisso', 'Berisso', '1923'], ['La Plata', 'La Plata', '1900']],
     'valores_fijos': False,
     'transporte': 'Colectivo',
     'whatsapp': True,
@@ -526,13 +532,15 @@ def llenar_direccion(page, datos, cfg, respirar, agregar=True):
     if datos.get('entre_calles'):
         _campo(page, 'entre_calles').fill(datos['entre_calles'])
         respirar()
-    if cfg.get('codigo_postal'):
-        _campo(page, 'codigo_postal').fill(str(cfg['codigo_postal']))
+    # Lo que dice la planilla, con la tabla de lugares de Opciones; si no, lo de Opciones.
+    lugar, codigo = normalizar.lugar_siges(datos.get('donde', []), cfg['lugares'])
+    codigo = codigo or cfg.get('codigo_postal')
+    if codigo:
+        _campo(page, 'codigo_postal').fill(str(codigo))
         respirar()
     falta = []
-    # Lo que dice la planilla (Punta Lara → Ensenada, Berisso → La Plata…); si no, lo de Opciones.
     for rotulo, clave in (('Distrito', 'distrito'), ('Localidad', 'localidad')):
-        ok, detalle = _buscador(page, rotulo, datos.get('lugar_siges') or cfg[clave])
+        ok, detalle = _buscador(page, rotulo, lugar or cfg[clave])
         if not ok:
             falta.append(detalle)
         respirar()

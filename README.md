@@ -64,10 +64,11 @@ La ventana tiene cuatro pestañas, en orden:
    - **Buscar en cualquier columna** achica el listado mientras se escribe.
 3. **Opciones**: la dirección del SiGeS, el **modo demo** (después de cada persona pregunta si
    quedó bien cargada), y los **valores fijos** para lo que la planilla todavía no pregunta
-   (transporte, WhatsApp, vivienda). Distrito y Localidad salen de la planilla (Ensenada o Punta
-   Lara → Ensenada; La Plata o Berisso → La Plata); si no dice ninguna, Ensenada. Código postal:
-   1925. Y la lista de palabras para la encuesta ("definir en una palabra lo que espera del
-   curso"). Se guarda en
+   (transporte, WhatsApp, vivienda). Una **tabla de lugares** editable: qué texto de la planilla
+   lleva a qué Distrito y Localidad y con qué código postal (de fábrica: Punta Lara → Ensenada
+   1931, Ensenada → Ensenada 1925, Berisso → Berisso 1923, La Plata → La Plata 1900); si la
+   planilla no dice ninguno, Ensenada y 1925. Y la lista de palabras para la encuesta ("definir
+   en una palabra lo que espera del curso"). Se guarda en
    `configuracion.json`, al lado del programa.
 4. **Cargar**: se abre una ventana de navegador **aparte** (no usa tus pestañas ni tus contraseñas
    guardadas), en **menu.abc.gob.ar**: **iniciás sesión vos** ahí, aunque ya tengas el SiGeS abierto

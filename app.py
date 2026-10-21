@@ -447,9 +447,13 @@ class App(tk.Tk):
 
         def mostrar(*_):
             datos, problemas = normalizar.normalizar_fila(nueva())
-            lugar = datos['lugar_siges'] or f'{self.ajustes["config"]["distrito"]} (el de Opciones)'
+            cfg = self.ajustes['config']
+            lugar, codigo = normalizar.lugar_siges(datos['donde'], cfg['lugares'])
+            if not lugar:
+                lugar, codigo = f'{cfg["distrito"]} (el de Opciones)', codigo or cfg['codigo_postal']
             texto = (f'Se carga así →  Calle: {datos["calle"] or "—"}  ·  Altura: {datos["altura"]}  ·  '
-                     f'Entre calles: {datos["entre_calles"] or "—"}\nDistrito y Localidad: {lugar}')
+                     f'Entre calles: {datos["entre_calles"] or "—"}\n'
+                     f'Distrito y Localidad: {lugar}  ·  Código postal: {codigo or cfg["codigo_postal"]}')
             texto += ('\n⛔ ' + '; '.join(problemas)) if problemas else '\n✅ Sin problemas: se puede cargar.'
             vista.configure(text=texto, foreground='#a12622' if problemas else '#1f5f8b')
 
@@ -549,9 +553,41 @@ class App(tk.Tk):
             self.v[clave] = tk.StringVar(value=cfg[clave])
             ttk.Entry(lugar, textvariable=self.v[clave], width=22).grid(row=0, column=col * 2 + 1, padx=6)
         ttk.Label(lugar, foreground='#555', text=(
-            'Distrito y Localidad salen de la planilla: Ensenada o Punta Lara → Ensenada; La Plata o Berisso → '
-            'La Plata. Estos se usan solo si la planilla no dice ninguna.')).grid(
+            'Estos se usan solo si la planilla no dice ninguno de los lugares de la tabla de abajo.')).grid(
             row=1, column=0, columnspan=6, sticky='w', pady=(4, 0))
+
+        # La tabla de lugares: qué texto de la planilla lleva a qué Distrito y Localidad, y con qué código postal.
+        tabla_lugares = ttk.LabelFrame(marco, text='Distrito, Localidad y código postal según la planilla', padding=10)
+        tabla_lugares.pack(fill='x', pady=(0, 8))
+        ttk.Label(tabla_lugares, foreground='#555', wraplength=880, justify='left', text=(
+            'Si la LOCALIDAD de la planilla (o, si no, el domicilio) dice el texto de la izquierda, se cargan ese '
+            'Distrito y Localidad y ese código postal. Van en orden: gana el primero que aparece (por eso Punta '
+            'Lara va antes que La Plata).')).pack(anchor='w')
+        filas = ttk.Frame(tabla_lugares)
+        filas.pack(anchor='w', pady=(6, 0))
+        for col, titulo in enumerate(('Si la planilla dice', 'Distrito y Localidad en el SiGeS', 'Código postal')):
+            ttk.Label(filas, text=titulo).grid(row=0, column=col, sticky='w', padx=(0, 6))
+        self.lugares = []        # por renglón, sus tres StringVar
+        renglones = iter(range(1, 10_000))    # siempre un renglón nuevo, aunque se hayan borrado otros
+
+        def agregar_lugar(valores=('', '', '')):
+            n = next(renglones)
+            variables = [tk.StringVar(value=v) for v in valores]
+            celdas = [ttk.Entry(filas, textvariable=v, width=w) for v, w in zip(variables, (22, 30, 12))]
+
+            def borrar():
+                for c in celdas:
+                    c.destroy()
+                self.lugares.remove(variables)
+
+            celdas.append(ttk.Button(filas, text='✕', width=3, command=borrar))
+            for col, c in enumerate(celdas):
+                c.grid(row=n, column=col, sticky='w', padx=(0, 6), pady=1)
+            self.lugares.append(variables)
+
+        for valores in cfg['lugares']:
+            agregar_lugar(valores)
+        ttk.Button(tabla_lugares, text='+ Agregar un lugar', command=agregar_lugar).pack(anchor='w', pady=(6, 0))
 
         self.v['valores_fijos'] = tk.BooleanVar(value=cfg['valores_fijos'])
         fijos = ttk.LabelFrame(marco, padding=10, labelwidget=ttk.Checkbutton(
@@ -640,6 +676,8 @@ class App(tk.Tk):
                 except tk.TclError:                     # un número borrado: queda el anterior
                     pass
         cfg['whatsapp'] = self.v['whatsapp_txt'].get() == 'Tiene WhatsApp'
+        cfg['lugares'] = [[v.get().strip() for v in variables] for variables in self.lugares
+                          if variables[0].get().strip() and variables[1].get().strip()]
         palabras = [p.strip() for p in self.palabras.get('1.0', 'end').splitlines() if p.strip()]
         cfg['encuesta_palabras'] = palabras or list(siges_real.CONFIG_INICIAL['encuesta_palabras'])
 

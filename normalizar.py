@@ -70,22 +70,21 @@ def normalizar_nacionalidad(valor):
 LOCALIDADES_CONOCIDAS = {'ensenada', 'punta lara', 'la plata', 'berisso'}
 
 
-# Lo que la gente escribe → lo que se elige en Distrito y Localidad del SiGeS.
-# En orden: "punta lara" antes que nada, por si dice "Punta Lara, La Plata".
-LUGARES_SIGES = [('punta lara', 'Ensenada'), ('ensenada', 'Ensenada'),
-                 ('berisso', 'La Plata'), ('la plata', 'La Plata')]
+def lugar_siges(textos, lugares):
+    """El Distrito y Localidad del SiGeS y su código postal, según lo que diga la
+    planilla: se mira la LOCALIDAD y, si no dice nada conocido, el domicilio.
 
-
-def lugar_siges(*textos):
-    """El Distrito y Localidad del SiGeS según lo que diga la planilla (se mira la
-    LOCALIDAD y, si no dice nada conocido, el domicilio). None si no se reconoce:
-    entonces se usa lo de Opciones."""
+    `lugares` es la tabla de Opciones: [texto en la planilla, lugar en el SiGeS,
+    código postal], en orden (gana el primero que aparece: por eso "Punta Lara"
+    va antes que "La Plata"). Devuelve (lugar, código) o (None, None) si no se
+    reconoce ninguno: entonces se usa lo de Opciones."""
     for texto in textos:
         v = sin_acentos(limpiar(texto)).lower()
-        for buscado, lugar in LUGARES_SIGES:
-            if re.search(rf'\b{buscado}\b', v):
-                return lugar
-    return None
+        for buscado, lugar, codigo in lugares:
+            b = sin_acentos(limpiar(buscado)).lower()
+            if b and re.search(rf'\b{re.escape(b)}\b', v):
+                return lugar, codigo
+    return None, None
 
 
 def normalizar_provincia(valor):
@@ -276,7 +275,8 @@ def normalizar_fila(fila):
         'entre_calles': entre_calles,
         'localidad': titulo(fila.get('localidad', '')),
         'distrito': titulo(fila.get('localidad', '')),
-        'lugar_siges': lugar_siges(fila.get('localidad', ''), fila.get('domicilio', '')),
+        # Para elegir Distrito, Localidad y código postal con la tabla de Opciones (ver lugar_siges).
+        'donde': [fila.get('localidad', ''), fila.get('domicilio', '')],
         'celular': revisar(normalizar_celular(fila.get('celular', ''))),
         'educacion': interpretar_educacion(fila),
     }

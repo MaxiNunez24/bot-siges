@@ -46,6 +46,7 @@ ESPERA_MS = 20_000
 CONFIG_INICIAL = {
     'distrito': 'Ensenada',
     'localidad': 'Ensenada',
+    'codigo_postal': '1925',
     'valores_fijos': False,
     'transporte': 'Colectivo',
     'whatsapp': True,
@@ -240,12 +241,16 @@ def ya_tiene_datos(page, datos):
     return diferencias
 
 
-def completar(page, datos, respirar=lambda: None, config=None):
+def completar(page, datos, respirar=lambda: None, config=None, trabado=None):
     """Completa el formulario ya abierto. Devuelve (ok, pendientes, fijos).
 
     `ok` es False solo si la persona ya estaba cargada o algo del formulario no
     estaba donde se esperaba (el motivo va en `pendientes`). `fijos` dice qué se
     cargó con valores fijos, para dejarlo anotado en el resumen.
+
+    `trabado(nombre, motivos, restantes, sigue_abierto)` se llama si un
+    sub-formulario quedó abierto: le pide a la persona que lo arregle y devuelve
+    True si lo cerró (entonces se sigue con los que faltan).
     """
     cfg = {**CONFIG_INICIAL, **(config or {})}
     pendientes, fijos = [], []
@@ -306,18 +311,35 @@ def completar(page, datos, respirar=lambda: None, config=None):
 
     # Los sub-formularios: uno abierto por vez. Contacto va ÚLTIMO porque, sin
     # valores fijos, queda abierto esperando el WhatsApp.
-    pasos = [('Dirección', _direccion), ('Educación', _educacion),
-             ('Vivienda', _vivienda), ('Contacto', _contacto)]
-    for i, (nombre, paso) in enumerate(pasos):
+    # Cada uno con un campo que solo se ve mientras está abierto.
+    pasos = [('Dirección', _direccion, lambda: _campo(page, 'calle')),
+             ('Educación', _educacion, lambda: page.locator('mat-select[formcontrolname="max_nivel_alcanzado"]')),
+             ('Vivienda', _vivienda, lambda: _campo(page, 'cuantas_personas')),
+             ('Contacto', _contacto, lambda: page.locator('mat-select[formcontrolname="tipo_de_contacto"]'))]
+    for i, (nombre, paso, campo) in enumerate(pasos):
         falta, fijo, abierto = paso(page, datos, cfg, respirar)
-        pendientes += falta
         fijos += fijo
+        restantes = [otro for otro, *_ in pasos[i + 1:]]
+        # Quedó uno abierto: los que siguen no se pueden abrir hasta cerrarlo. Se
+        # le pide a la persona que lo arregle y, si lo cierra, se sigue con el resto.
+        if abierto and restantes and trabado and trabado(nombre, falta, restantes,
+                                                         lambda campo=campo: _visible(campo())):
+            continue
+        pendientes += falta
         if abierto:
-            # Quedó uno abierto: los que siguen no se pueden abrir hasta cerrarlo.
-            pendientes += [f'{otro} (después de cerrar {nombre})' for otro, _ in pasos[i + 1:]]
+            pendientes += [f'{otro} (después de cerrar {nombre})' for otro in restantes]
             break
 
     return True, pendientes, fijos
+
+
+def _visible(loc):
+    return loc.count() > 0 and loc.first.is_visible()
+
+
+def en_el_listado(page):
+    """¿Volvió la persona al listado del trayecto? (el formulario cerrado y el "+" a la vista)"""
+    return not _visible(_campo(page, 'apellido')) and _visible(page.locator('button:has(mat-icon:text-is("add"))'))
 
 
 # Cada sub-formulario devuelve (pendientes, cargado_con_fijos, quedo_abierto).
@@ -339,6 +361,12 @@ def llenar_direccion(page, datos, cfg, respirar, agregar=True):
     respirar()
     if datos.get('altura'):
         _campo(page, 'altura').fill(str(datos['altura']))
+        respirar()
+    if datos.get('entre_calles'):
+        _campo(page, 'entre_calles').fill(datos['entre_calles'])
+        respirar()
+    if cfg.get('codigo_postal'):
+        _campo(page, 'codigo_postal').fill(str(cfg['codigo_postal']))
         respirar()
     falta = []
     for rotulo, clave in (('Distrito', 'distrito'), ('Localidad', 'localidad')):

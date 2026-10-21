@@ -36,7 +36,9 @@ LOS PASOS
 2.  Pestaña "Planilla": elegí el archivo. Aparecen todos los inscriptos.
       · Las filas AMARILLAS vienen destildadas: no se cargan, salvo que las tildes.
       · Las que tienen un problema (un DNI raro, una fecha imposible) aparecen en
-        rojo, con el motivo, y no se pueden tildar: hay que corregir la planilla.
+        rojo, con el motivo, y no se pueden tildar hasta corregirlas.
+      · Para corregir los datos de alguien, tocá el lápiz ✏️ de su fila. Los
+        cambios quedan en el programa: la planilla no se toca.
     Tildá y destildá a quién cargar.
       · Para cargar solo una parte: en "Cargar desde … hasta …" escribí la fila,
         el DNI, el apellido o el nombre de la primera y la última persona, o
@@ -67,6 +69,16 @@ LO QUE EL BOT NO HACE NUNCA
 Para practicar sin tocar el sistema real: en Opciones, tildá "Ensayo con el
 simulador".
 """
+
+
+# Lo que se puede corregir de una fila desde la aplicación (si la planilla trae esa columna).
+CAMPOS_EDITABLES = [
+    ('dni', 'DNI'), ('apellidos', 'Apellido/s'), ('nombres', 'Nombre/s'), ('genero', 'Género'),
+    ('fecha_nacimiento', 'Fecha de nacimiento'), ('nacionalidad', 'Nacionalidad'),
+    ('provincia', 'Provincia de nacimiento'), ('domicilio', 'Domicilio'), ('localidad', 'Localidad'),
+    ('celular', 'Celular'), ('edu_primario', 'Primario'), ('edu_secundario', 'Secundario'),
+    ('edu_terciario', 'Terciario'), ('edu_universitario', 'Universitario'),
+]
 
 
 def sin_tildes(texto):
@@ -155,6 +167,7 @@ class App(tk.Tk):
 
         self.ajustes = motor.cargar_ajustes()
         self.filas = []          # (número de fila, datos, problemas, amarilla)
+        self.origen = []         # por fila, su diccionario de la planilla (lo que se edita)
         self.marcadas = set()    # índices de self.filas
         self.textos = []         # por fila, todo su contenido junto y sin tildes, para buscar
         self.visibles = []       # índices de self.filas que pasan el rango y la búsqueda
@@ -239,12 +252,12 @@ class App(tk.Tk):
 
         tabla = ttk.Frame(marco)
         tabla.pack(fill='both', expand=True)
-        self.arbol = ttk.Treeview(tabla, columns=('marca', 'fila', 'quien', 'dni', 'estado'), show='headings',
-                                  selectmode='none')
+        self.arbol = ttk.Treeview(tabla, columns=('marca', 'fila', 'quien', 'dni', 'estado', 'editar'),
+                                  show='headings', selectmode='none')
         for col, titulo, ancho in (('marca', '✔', 40), ('fila', 'Fila', 50), ('quien', 'Apellido y nombre', 260),
-                                   ('dni', 'DNI', 100), ('estado', 'Estado', 460)):
+                                   ('dni', 'DNI', 100), ('estado', 'Estado', 420), ('editar', 'Editar', 60)):
             self.arbol.heading(col, text=titulo)
-            self.arbol.column(col, width=ancho, anchor='center' if col in ('marca', 'fila') else 'w')
+            self.arbol.column(col, width=ancho, anchor='center' if col in ('marca', 'fila', 'editar') else 'w')
         self.arbol.tag_configure('amarilla', background='#fff3b0')
         self.arbol.tag_configure('problema', background='#f8d7da')
         barra = ttk.Scrollbar(tabla, orient='vertical', command=self.arbol.yview)
@@ -289,19 +302,28 @@ class App(tk.Tk):
             hasta = planilla_google.a_fecha(self.hasta.get()) if self.hasta.get().strip() else None
         except Exception:                               # noqa: BLE001
             desde = hasta = None
-        self.filas, self.marcadas, self.textos = [], set(), []
+        self.filas, self.marcadas, self.textos, self.origen = [], set(), [], []
         for cruda in self.crudas:
             f = cruda.get('_fecha')
             if (desde or hasta) and (f is None or (desde and f < desde) or (hasta and f > hasta)):
                 continue
-            datos, problemas = normalizar.normalizar_fila(cruda)
-            i = len(self.filas)
-            self.filas.append((cruda['_fila'], datos, problemas, cruda['_amarilla']))
-            if not problemas and not cruda['_amarilla']:
-                self.marcadas.add(i)
-            self.textos.append(sin_tildes(' '.join(str(v) for k, v in cruda.items() if not k.startswith('_'))))
+            self.filas.append(None)
+            self.textos.append('')
+            self.origen.append(cruda)
+            self._interpretar(len(self.filas) - 1)
         self.deslizador.configurar(len(self.filas))
         self._rango_todo()
+
+    def _interpretar(self, i):
+        """Vuelve a leer la fila i de su diccionario de la planilla (al importar o al editarla)."""
+        cruda = self.origen[i]
+        datos, problemas = normalizar.normalizar_fila(cruda)
+        self.filas[i] = (cruda['_fila'], datos, problemas, cruda['_amarilla'])
+        if not problemas and not cruda['_amarilla']:
+            self.marcadas.add(i)
+        elif problemas:
+            self.marcadas.discard(i)
+        self.textos[i] = sin_tildes(' '.join(str(v) for k, v in cruda.items() if not k.startswith('_')))
 
     def _pintar(self):
         """Vuelve a llenar la tabla con las filas que pasan el rango y la búsqueda."""
@@ -318,9 +340,11 @@ class App(tk.Tk):
                 estado, tag = '🟨 Pintada de amarillo: no se carga (tildala si querés)', 'amarilla'
             else:
                 estado, tag = '✅ Lista', ''
+            if self.origen[i].get('_editada'):
+                estado = '✏️ Editada · ' + estado
             quien = f'{datos["apellidos"]}, {datos["nombres"]}'.strip(', ')
             self.arbol.insert('', 'end', iid=str(i), tags=(tag,),
-                              values=('☑' if i in self.marcadas else '☐', numero, quien, datos['dni'] or '', estado))
+                              values=('☑' if i in self.marcadas else '☐', numero, quien, datos['dni'] or '', estado, '✏️'))
         if self.filas:
             self.lbl_rango.configure(text=f'De {self._describir(a)}  a  {self._describir(b)}  '
                                           f'({b - a + 1} de {len(self.filas)} filas)')
@@ -375,13 +399,74 @@ class App(tk.Tk):
         if not iid:
             return
         i = int(iid)
+        if self.arbol.identify_column(evento.x) == '#6':
+            self._editar(i)
+            return
         if self.filas[i][2]:
-            messagebox.showinfo('No se puede cargar', 'Esta fila tiene un problema en los datos:\n\n'
-                                + '\n'.join(self.filas[i][2]) + '\n\nCorregila en la planilla y volvé a importarla.')
+            if messagebox.askyesno('No se puede cargar', 'Esta fila tiene un problema en los datos:\n\n'
+                                   + '\n'.join(self.filas[i][2]) + '\n\n¿La corregís acá?'):
+                self._editar(i)
             return
         self.marcadas ^= {i}
         self.arbol.set(iid, 'marca', '☑' if i in self.marcadas else '☐')
         self._contar()
+
+    def _editar(self, i):
+        """Una ventana para corregir los datos de la fila i. Muestra en vivo cómo se
+        van a cargar, y antes de guardar pide confirmar cada cambio. La planilla
+        no se toca: los cambios quedan en el programa hasta que se importe de nuevo."""
+        cruda = self.origen[i]
+        campos = [(clave, rotulo) for clave, rotulo in CAMPOS_EDITABLES if clave in cruda]
+        ventana = tk.Toplevel(self)
+        ventana.title(f'Editar la fila {cruda["_fila"]}')
+        ventana.transient(self)
+        ventana.grab_set()
+        marco = ttk.Frame(ventana, padding=14)
+        marco.pack(fill='both', expand=True)
+
+        valores = {}
+        for fila, (clave, rotulo) in enumerate(campos):
+            ttk.Label(marco, text=rotulo + ':').grid(row=fila, column=0, sticky='w', pady=2)
+            valores[clave] = tk.StringVar(value=cruda.get(clave) or '')
+            ttk.Entry(marco, textvariable=valores[clave], width=48).grid(row=fila, column=1, sticky='we', pady=2, padx=6)
+        vista = ttk.Label(marco, wraplength=560, justify='left')
+        vista.grid(row=len(campos), column=0, columnspan=2, sticky='w', pady=(10, 0))
+
+        def nueva():
+            return {**cruda, **{clave: v.get().strip() for clave, v in valores.items()}}
+
+        def mostrar(*_):
+            datos, problemas = normalizar.normalizar_fila(nueva())
+            texto = (f'Se carga así →  Calle: {datos["calle"] or "—"}  ·  Altura: {datos["altura"]}  ·  '
+                     f'Entre calles: {datos["entre_calles"] or "—"}')
+            texto += ('\n⛔ ' + '; '.join(problemas)) if problemas else '\n✅ Sin problemas: se puede cargar.'
+            vista.configure(text=texto, foreground='#a12622' if problemas else '#1f5f8b')
+
+        for v in valores.values():
+            v.trace_add('write', mostrar)
+        mostrar()
+
+        def guardar():
+            cambios = [(rotulo, cruda.get(clave) or '', valores[clave].get().strip())
+                       for clave, rotulo in campos if (cruda.get(clave) or '') != valores[clave].get().strip()]
+            if not cambios:
+                ventana.destroy()
+                return
+            detalle = '\n'.join(f'{rotulo}: "{antes}" → "{despues}"' for rotulo, antes, despues in cambios)
+            if not messagebox.askyesno('Confirmar los cambios', f'Fila {cruda["_fila"]}:\n\n{detalle}\n\n'
+                                       'Los cambios quedan en el programa (la planilla no se toca). ¿Los guardo?',
+                                       parent=ventana):
+                return
+            cruda.update(nueva())
+            cruda['_editada'] = True
+            self._interpretar(i)
+            ventana.destroy()
+            self._pintar()
+
+        botones = ttk.Frame(marco)
+        botones.grid(row=len(campos) + 1, column=0, columnspan=2, sticky='e', pady=(12, 0))
+        ttk.Button(botones, text='Cancelar', command=ventana.destroy).pack(side='right')
+        ttk.Button(botones, text='Guardar cambios', command=guardar).pack(side='right', padx=6)
 
     def _tildar_listos(self):
         for i in self.visibles:
@@ -425,7 +510,8 @@ class App(tk.Tk):
 
         lugar = ttk.LabelFrame(marco, text='Dirección del alumno', padding=10)
         lugar.pack(fill='x', pady=8)
-        for col, (clave, texto) in enumerate((('distrito', 'Distrito'), ('localidad', 'Localidad'))):
+        for col, (clave, texto) in enumerate((('distrito', 'Distrito'), ('localidad', 'Localidad'),
+                                                  ('codigo_postal', 'Código postal'))):
             ttk.Label(lugar, text=texto + ':').grid(row=0, column=col * 2, sticky='w')
             self.v[clave] = tk.StringVar(value=cfg[clave])
             ttk.Entry(lugar, textvariable=self.v[clave], width=22).grid(row=0, column=col * 2 + 1, padx=6)

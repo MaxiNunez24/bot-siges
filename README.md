@@ -53,7 +53,10 @@ La ventana tiene cuatro pestañas, en orden:
    (.xlsx)**). Aparecen todos los inscriptos con una casilla:
    - las filas **pintadas de amarillo** vienen destildadas (se pueden tildar a mano);
    - las que tienen un **problema en los datos** aparecen en rojo con el motivo, y no se pueden
-     tildar: hay que corregir la planilla y volver a importarla;
+     tildar hasta corregirlas;
+   - el lápiz ✏️ de cada fila abre sus datos para corregirlos ahí mismo (con confirmación). Muestra
+     cómo se va a cargar el domicilio (calle, altura, entre calles). La planilla no se toca: los
+     cambios quedan en el programa hasta que se vuelva a importar;
    - se puede filtrar por fecha de inscripción;
    - **rango**: "Cargar desde … hasta …" acepta número de fila, DNI, apellido o nombre de la
      primera y la última persona, o se mueven los dos extremos del deslizador. Solo se carga lo
@@ -61,7 +64,7 @@ La ventana tiene cuatro pestañas, en orden:
    - **Buscar en cualquier columna** achica el listado mientras se escribe.
 3. **Opciones**: la dirección del SiGeS, el **modo demo** (después de cada persona pregunta si
    quedó bien cargada), y los **valores fijos** para lo que la planilla todavía no pregunta
-   (transporte, WhatsApp, vivienda). Distrito y Localidad: Ensenada. Se guarda en
+   (transporte, WhatsApp, vivienda). Distrito y Localidad: Ensenada; código postal: 1925. Se guarda en
    `configuracion.json`, al lado del programa.
 4. **Cargar**: se abre una ventana de navegador **aparte** (no usa tus pestañas ni tus contraseñas
    guardadas), en **menu.abc.gob.ar**: **iniciás sesión vos** ahí, aunque ya tengas el SiGeS abierto

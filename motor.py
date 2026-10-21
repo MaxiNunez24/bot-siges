@@ -281,6 +281,26 @@ def cargar_en(contexto, personas, ajustes, ui, primera):
 def cargar_todas(personas, ajustes, ui, page, esperar, respirar, cancelado, lento, resultados):
     """El recorrido persona por persona. Va dejando cada registro en `resultados`
     apenas termina, así si se cancela el resumen tiene lo hecho hasta ahí."""
+    def trabado(nombre, motivos, restantes, sigue_abierto):
+        """Un sub-formulario quedó abierto: se dice por qué y se espera a que la
+        persona lo arregle. True si lo cerró; False si prefiere dejarlo así."""
+        for m in motivos:
+            ui.contar(f'   ⚠️ {m}', 'aviso')
+        siguen = ', '.join(restantes)
+        texto = (f'{nombre} quedó abierto: {"; ".join(motivos)}. En el navegador arreglalo y tocá '
+                 f'"Agregar"; después tocá el botón de acá y sigo con {siguen}.')
+        while True:
+            esperar(texto, 'Ya lo agregué, seguir')
+            if not sigue_abierto():
+                ui.contar(f'   ✔ {nombre}: lo agregaste vos. Sigo con {siguen}.', 'ok')
+                return True
+            if esperando(page.context, ui.preguntar,
+                         f'{nombre} sigue abierto en el SiGeS: todavía no se agregó.\n\n'
+                         f'¿Lo dejo así? Sí: lo terminás vos, y también {siguen}. '
+                         f'No: te espero a que lo arregles.', cancelado=cancelado):
+                return False
+            texto = f'{nombre} sigue abierto. Arreglalo, tocá "Agregar" en el SiGeS y después el botón de acá.'
+
     for k, (fila, datos) in enumerate(personas):
         if cancelado():
             raise Cancelado
@@ -300,7 +320,7 @@ def cargar_todas(personas, ajustes, ui, page, esperar, respirar, cancelado, lent
                     ui.contar(f'   No pude abrir su formulario: {motivo}', 'aviso')
                     page = esperar(f'Buscá vos el DNI {datos["dni"]} y abrí "Agregar estudiante".',
                                    'Listo, seguir')
-                ok, pendientes, fijos = siges_real.completar(page, datos, respirar, ajustes['config'])
+                ok, pendientes, fijos = siges_real.completar(page, datos, respirar, ajustes['config'], trabado)
         except Cancelado:
             registro['resultado'] = 'cancelado a mitad'
             resultados.append(registro)
@@ -327,6 +347,16 @@ def cargar_todas(personas, ajustes, ui, page, esperar, respirar, cancelado, lent
             page = esperar('Revisá el formulario, completá lo marcado en amarillo, apretá "Guardar '
                            'estudiante" y hacé la encuesta. Cuando vuelvas al listado del trayecto, '
                            'tocá el botón.', 'Siguiente')
+            # Que "Siguiente" no deje seguir con el formulario todavía abierto.
+            while not siges_real.en_el_listado(page):
+                if esperando(page.context, ui.preguntar,
+                             f'No veo el listado del trayecto: el formulario de {quien} parece seguir '
+                             f'abierto (¿no se guardó?).\n\n¿Paso igual a la próxima persona? '
+                             f'No: te espero a que guardes y vuelvas al listado.', cancelado=cancelado):
+                    ui.contar('   ⚠️ Pasé a la próxima sin ver el listado: revisá si quedó guardado.', 'aviso')
+                    break
+                page = esperar('Guardá (o cancelá en el SiGeS) y volvé al listado del trayecto. '
+                               'Cuando lo veas, tocá el botón.', 'Siguiente')
         if ajustes.get('demo'):
             bien = esperando(page.context, ui.preguntar, f'¿Los datos de {quien} quedaron cargados correctamente?',
                              cancelado=cancelado)

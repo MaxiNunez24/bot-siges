@@ -43,6 +43,8 @@ CHEQUEOS = [
     (2, 'botón Guardar estudiante (lo aprieta la persona)', lambda p: s._boton(p, 'Guardar estudiante')),
     (5, 'dirección: Calle', lambda p: s._campo(p, 'calle')),
     (5, 'dirección: Altura', lambda p: s._campo(p, 'altura')),
+    (5, 'dirección: Código postal', lambda p: s._campo(p, 'codigo_postal')),
+    (5, 'dirección: Entre calles', lambda p: s._campo(p, 'entre_calles')),
     (5, 'dirección: buscador Distrito', lambda p: p.get_by_role('combobox', name='Distrito', exact=True)),
     (5, 'dirección: buscador Localidad', lambda p: p.get_by_label('Localidad', exact=True)),
     (5, 'dirección: botón Agregar', lambda p: s._boton(p, 'Agregar')),

@@ -144,22 +144,52 @@ def domicilio_sospechoso(domicilio, dni):
     return None
 
 
+# Lo que anuncia la altura: "número 87", "nro 629", "n° 5", "altura 1200".
+_ANTES_DE_ALTURA = r'(?:n[uú]mero|numero|nro|num|n[°º]|altura)\.?'
+# Lo que anuncia el nombre de la calle: "calle 47", "diagonal 74", "av. 13".
+_ANTES_DE_CALLE = {'calle', 'diagonal', 'diag', 'avenida', 'av', 'pasaje', 'pje'}
+
+
 def partir_direccion(domicilio):
-    """El SiGeS pide Calle y Altura por separado.
+    """El SiGeS pide Calle, Altura y Entre calles por separado.
 
-    'Belgrano 629'          -> calle='Hernández',          altura='629'
-    '31 entre 40 y 42 bis s/n' -> calle='5 entre 8 y 10 bis', altura='s/n'
+    'Belgrano 629'                                -> ('Belgrano', '629', '')
+    'Calle 47 nro 629'                            -> ('Calle 47', '629', '')
+    'Calle Moreno número 87 entre Jerez y Mitre'  -> ('Moreno', '87', 'Jerez y Mitre')
+    '31 entre 40 y 42 bis s/n'                    -> ('31', 's/n', '40 y 42 bis')
 
-    Ante la duda va todo a Calle y la altura queda 's/n': es lo que hizo la
-    preceptora a mano, y es preferible a inventar un número.
+    Un número con "número", "nro", "n°" o "altura" adelante es la altura; con
+    "calle" (o "diagonal", "avenida"…) adelante es el nombre de la calle. Ante la
+    duda va todo a Calle y la altura queda 's/n': es lo que hizo la preceptora a
+    mano, y es preferible a inventar un número.
     """
     d = limpiar(domicilio)
+    altura = None
     if re.search(r'\bs/?n\b', d, re.IGNORECASE):
-        return re.sub(r'\s*\bs/?n\b\s*$', '', d, flags=re.IGNORECASE), 's/n'
-    m = re.match(r'^(.*?)[\s,]+(\d{1,5})$', d)
+        altura = 's/n'
+        d = limpiar(re.sub(r'\s*\bs/?n\b', ' ', d, flags=re.IGNORECASE))
+
+    # "entre Jerez y Mitre", "e/ 40 y 42": hasta la altura anunciada o el final.
+    entre = ''
+    m = re.search(r'(?:\bentre\b|\be/)\s*(.+?)(?=[\s,]+' + _ANTES_DE_ALTURA + r'\s*\d|$)', d, re.IGNORECASE)
     if m:
-        return limpiar(m.group(1)), m.group(2)
-    return d, 's/n'
+        entre = limpiar(re.sub(r'^(?:calles?|' + _ANTES_DE_ALTURA + r')\s*', '', m.group(1),
+                               flags=re.IGNORECASE)).strip(' ,')
+        d = limpiar(d[:m.start()] + ' ' + d[m.end():]).strip(' ,')
+
+    m = re.search(r'\b' + _ANTES_DE_ALTURA + r'\s*:?\s*(\d{1,5}(?:\s*bis\b)?)', d, re.IGNORECASE)
+    if m and altura is None:
+        altura = m.group(1)
+        d = limpiar(d[:m.start()] + ' ' + d[m.end():])
+    elif altura is None:
+        m = re.match(r'^(.*?)[\s,]+(\d{1,5})$', d)
+        if m and sin_acentos(m.group(1)).lower().rstrip('.') not in _ANTES_DE_CALLE:
+            d, altura = m.group(1), m.group(2)
+
+    calle = d.strip(' ,')
+    # "Calle Moreno" es Moreno; "Calle 47" queda así, que si no es solo un número.
+    calle = re.sub(r'^calle\s+(?=[^\d\s])', '', calle, flags=re.IGNORECASE)
+    return calle, altura or 's/n', entre
 
 
 SEXO_POR_GENERO = {'mujer': 'Femenino', 'varon': 'Masculino'}
@@ -212,7 +242,7 @@ def normalizar_fila(fila):
     problema_dom = domicilio_sospechoso(fila.get('domicilio', ''), dni)
     if problema_dom:
         problemas.append(problema_dom)
-    calle, altura = partir_direccion(fila.get('domicilio', ''))
+    calle, altura, entre_calles = partir_direccion(fila.get('domicilio', ''))
 
     datos = {
         'dni': dni,
@@ -225,6 +255,7 @@ def normalizar_fila(fila):
         'lugar_nacimiento': revisar(normalizar_provincia(fila.get('provincia', ''))),
         'calle': calle,
         'altura': altura,
+        'entre_calles': entre_calles,
         'localidad': titulo(fila.get('localidad', '')),
         'distrito': titulo(fila.get('localidad', '')),
         'celular': revisar(normalizar_celular(fila.get('celular', ''))),

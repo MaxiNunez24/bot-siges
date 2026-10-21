@@ -4,8 +4,8 @@
 
 Las decisiones las toma la preceptora, en la ventana: a quién se carga, con qué
 valores se completa lo que la planilla no trae, y cuándo se sigue con la
-próxima persona. El bot nunca guarda, nunca contesta la encuesta y nunca toca
-"Generar matrícula inicial".
+próxima persona. El bot nunca guarda el formulario y nunca toca "Generar
+matrícula inicial". La encuesta del final sí la completa (ver siges_real.py).
 """
 import queue
 import threading
@@ -52,7 +52,11 @@ LOS PASOS
     si está), en el menú de ABC: iniciá sesión VOS ahí, aunque ya tengas el SiGeS
     abierto en tu Chrome de siempre, entrá al SiGeS y abrí el listado del trayecto. Desde ahí, por cada persona, el bot busca el DNI y
     completa. Vos revisás, completás lo marcado en amarillo, apretás "Guardar
-    estudiante", hacés la encuesta, y tocás "Siguiente".
+    estudiante" y tocás "Ya guardé, seguir": la encuesta la completa el bot y
+    finaliza la inscripción. En modo demo, el "Si" y el "Entendido" del final
+    los tocás vos.
+    Si la persona ya está en el centro (en otro curso), el SiGeS no abre el
+    formulario: el bot elige "Datos del estudiante actual" y hace la encuesta.
     Si hace falta frenar, "Cancelar la carga": no hay que cerrar el programa.
     El navegador queda ABIERTO al terminar o al cancelar: la sesión se inicia una
     sola vez, y podés corregir a mano o cargar a los que faltaron. Se cierra
@@ -62,7 +66,7 @@ LOS PASOS
 LO QUE EL BOT NO HACE NUNCA
 
   · Iniciar sesión, ni ver tu contraseña.
-  · Guardar, contestar la encuesta, o "Generar matrícula inicial".
+  · Guardar el formulario, o "Generar matrícula inicial".
   · Pisar los datos de alguien que ya estaba cargado: te avisa qué difiere.
   · Tocar salud, discapacidad o restricción judicial.
 
@@ -491,8 +495,21 @@ class App(tk.Tk):
 
     # ─────────────────────────── 3. Opciones ────────────────────────────
     def _pestana_opciones(self):
-        marco = ttk.Frame(self.pestanas, padding=12)
-        self.pestanas.add(marco, text='⚙️ Opciones')
+        # Con barra de desplazamiento: en una notebook no entra todo a lo alto.
+        afuera = ttk.Frame(self.pestanas)
+        self.pestanas.add(afuera, text='⚙️ Opciones')
+        lienzo = tk.Canvas(afuera, highlightthickness=0, background=ttk.Style().lookup('TFrame', 'background'))
+        barra = ttk.Scrollbar(afuera, orient='vertical', command=lienzo.yview)
+        lienzo.configure(yscrollcommand=barra.set)
+        barra.pack(side='right', fill='y')
+        lienzo.pack(side='left', fill='both', expand=True)
+        marco = ttk.Frame(lienzo, padding=12)
+        adentro = lienzo.create_window(0, 0, window=marco, anchor='nw')
+        marco.bind('<Configure>', lambda e: lienzo.configure(scrollregion=lienzo.bbox('all')))
+        lienzo.bind('<Configure>', lambda e: lienzo.itemconfigure(adentro, width=e.width))
+        rueda = lambda e: lienzo.yview_scroll(-1 if e.delta > 0 else 1, 'units')   # noqa: E731
+        afuera.bind('<Enter>', lambda e: self.bind_all('<MouseWheel>', rueda))
+        afuera.bind('<Leave>', lambda e: self.unbind_all('<MouseWheel>'))
         cfg = self.ajustes['config']
         self.v = {}
 
@@ -561,6 +578,16 @@ class App(tk.Tk):
         si_no(7, 2, 'educacion_completo', 'Completo')
         si_no(7, 4, 'educacion_cursando', 'Cursando')
 
+        encuesta = ttk.LabelFrame(marco, text='Encuesta del final', padding=10)
+        encuesta.pack(fill='x', pady=(8, 0))
+        ttk.Label(encuesta, foreground='#555', wraplength=560, justify='left', text=(
+            'La completa el bot: la razón y cómo se enteró, al azar; las preguntas Si/No en No; nivel de '
+            'contenidos y experiencia en "Muy bueno". Para "definir en una palabra lo que espera del curso" '
+            'elige al azar una de esta lista (una por renglón):')).grid(row=0, column=0, sticky='nw')
+        self.palabras = tk.Text(encuesta, width=24, height=5, font=FUENTE)
+        self.palabras.insert('1.0', '\n'.join(cfg['encuesta_palabras']))
+        self.palabras.grid(row=0, column=1, sticky='nsew', padx=(10, 0))
+
         abajo = ttk.Frame(marco)
         abajo.pack(fill='x', pady=10)
         self.btn_probar = ttk.Button(abajo, text='🩺 Probar esta compu', command=self._probar)
@@ -590,6 +617,8 @@ class App(tk.Tk):
                 except tk.TclError:                     # un número borrado: queda el anterior
                     pass
         cfg['whatsapp'] = self.v['whatsapp_txt'].get() == 'Tiene WhatsApp'
+        palabras = [p.strip() for p in self.palabras.get('1.0', 'end').splitlines() if p.strip()]
+        cfg['encuesta_palabras'] = palabras or list(siges_real.CONFIG_INICIAL['encuesta_palabras'])
 
     def _guardar_ajustes(self, avisar=True):
         self._leer_opciones()
@@ -648,7 +677,8 @@ class App(tk.Tk):
                 return
             if not messagebox.askyesno('Sistema REAL del Ministerio',
                                        f'Esto va contra el SiGeS REAL, con {len(elegidas)} persona(s).\n\n'
-                                       'El bot completa y para: guardás vos, hacés la encuesta vos.\n\n¿Seguimos?'):
+                                       'El bot completa y para: el formulario lo guardás vos. La encuesta la '
+                                       'completa el bot y finaliza la inscripción.\n\n¿Seguimos?'):
                 return
         self.corriendo = True
         self.cancelar.clear()

@@ -64,13 +64,17 @@ La ventana tiene cuatro pestañas, en orden:
    - **Buscar en cualquier columna** achica el listado mientras se escribe.
 3. **Opciones**: la dirección del SiGeS, el **modo demo** (después de cada persona pregunta si
    quedó bien cargada), y los **valores fijos** para lo que la planilla todavía no pregunta
-   (transporte, WhatsApp, vivienda). Distrito y Localidad: Ensenada; código postal: 1925. Se guarda en
+   (transporte, WhatsApp, vivienda). Distrito y Localidad: Ensenada; código postal: 1925. Y la lista
+   de palabras para la encuesta ("definir en una palabra lo que espera del curso"). Se guarda en
    `configuracion.json`, al lado del programa.
 4. **Cargar**: se abre una ventana de navegador **aparte** (no usa tus pestañas ni tus contraseñas
    guardadas), en **menu.abc.gob.ar**: **iniciás sesión vos** ahí, aunque ya tengas el SiGeS abierto
    en tu Chrome de siempre, entrás al SiGeS y abrís el listado del trayecto. Desde
-   ahí el bot, por cada persona, toca **+**, busca el DNI, completa, y espera a que revises,
-   apretes "Guardar estudiante" y hagas la encuesta. **⏹ Cancelar la carga** la frena en
+   ahí el bot, por cada persona, toca **+**, busca el DNI, completa, y espera a que revises y
+   apretes "Guardar estudiante". Después **completa la encuesta** y finaliza la inscripción (en
+   **modo demo**, el "Si" y el "Entendido" del final los tocás vos). Si la persona **ya está en el
+   centro** en otro curso, elige "Datos del estudiante actual" (nunca RENAPER) y hace la encuesta.
+   **⏹ Cancelar la carga** la frena en
    cualquier momento sin cerrar el programa (deja el resumen de lo hecho hasta ahí).
    El navegador **queda abierto** al terminar o al cancelar, hasta que se cierra su ventana: la
    sesión se inicia una sola vez, y se puede corregir a mano o cargar a los que faltaron.
@@ -97,8 +101,10 @@ vez instala lo necesario, y abre la misma ventana.
 ## Lo que el bot NO hace, a propósito
 
 1. **No inicia sesión.** La sesión la abre una persona; el bot no tiene ni pide contraseñas.
-2. **No guarda, no contesta la encuesta, y nunca genera la matrícula inicial.** Completa, para y
-   espera. Quedan como pre inscriptos.
+2. **No guarda el formulario y nunca genera la matrícula inicial.** Completa, para y espera a que
+   lo guardes vos. La encuesta del final sí la completa (decisión del 21/10): la razón y cómo se
+   enteró al azar, las preguntas Si/No en No, "Muy bueno" en las opiniones y una palabra de la lista
+   de Opciones.
 3. **No pisa a nadie.** Si el DNI ya tenía datos cargados, no toca nada y avisa qué difiere.
 4. **No toca salud, discapacidad, restricción judicial, redes ni programas sociales.**
 5. **No elige "algo parecido".** Si un menú o un buscador no tiene exactamente la opción, la deja

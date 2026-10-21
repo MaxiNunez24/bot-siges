@@ -109,6 +109,15 @@ selector del bot encuentre **exactamente un** elemento.
 | 10 | Confirmación | *"¿Desea Finalizar la inscripción?"* → Si |
 | 11 | Aviso | *"Inscripción finalizada correctamente."* → Entendido |
 
+**Otro camino (relevado el 21/10): la persona ya está en el centro, inscripta en otro curso.** Al
+tocar **Buscar estudiante** no se abre el formulario: aparece **"Actualizar datos por RENAPER"**, con
+dos opciones para tocar, **Datos del estudiante actual** y **Datos del estudiante por RENAPER**
+(nombre, apellido, DNI, CUIL, fecha de nacimiento, calle, altura, código postal, distrito). Lo de
+RENAPER puede venir incompleto o mal (en la captura, sin apellido y con la fecha de hoy). Después de
+elegir se va **directo a la encuesta** (9). En el centro se usan **siempre los datos actuales**,
+nunca los de RENAPER (decisión del 21/10): el bot toca "Datos del estudiante actual", avisa en qué
+difieren de la planilla, y completa la encuesta.
+
 ### Cómo se encuentra cada cosa
 
 - **Campos de texto, por `formcontrolname` o `name`**: los pusieron los programadores del sistema,
@@ -137,3 +146,20 @@ el bot los eligiera **al azar** "para no sesgar"; se decidió que **no**:
 El bot completa lo que tiene dato, **deja esas secciones resaltadas en amarillo** y las completa la
 preceptora. **La solución de fondo: agregar esas preguntas al formulario de Google de inscripción**,
 con las mismas opciones que el SiGeS. Desde ese momento el dato es real y el bot lo carga solo.
+
+**Cambio del 21/10, para la encuesta:** se decidió que la complete el bot. Quedó así:
+
+| Pregunta | Respuesta |
+|---|---|
+| Principal razón de inscripción (menú `razon`, el 1º) | Al azar entre las opciones del menú |
+| ¿Vinculado con su trabajo actual? (`vinculado_a_trabajo`) | No |
+| ¿Le permitirá cambiar su condición laboral? (`consideracion_de_logro`) | No |
+| Nivel de contenidos (`razon`, el 2º) | Muy bueno |
+| Experiencia con docentes y compañeros (`razon`, el 3º) | Muy bueno |
+| Una palabra de lo que espera (`definicion_por_palabra`) | Al azar de la lista de Opciones |
+| Cómo se enteró (grupo de nombre variable: se elige por `value`) | Al azar entre recomendación, cercanía y redes ("Otros" no) |
+| ¿Encontró el curso que buscaba? (`curso_de_interes`) | No, hasta que salga del formulario de inscripción |
+| ¿Encontró otras ofertas de su interés? (`otro_curso`) | No, ídem |
+
+Después toca **Finalizar inscripción**. En modo demo, el "Si" de la confirmación y el "Entendido"
+del aviso los toca la preceptora; si no, el bot. Cada respuesta queda en el resumen de la carga.

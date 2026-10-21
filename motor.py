@@ -301,6 +301,32 @@ def cargar_todas(personas, ajustes, ui, page, esperar, respirar, cancelado, lent
                 return False
             texto = f'{nombre} sigue abierto. Arreglalo, tocá "Agregar" en el SiGeS y después el botón de acá.'
 
+    def encuesta(page, registro):
+        """Si está abierta la encuesta, la completa (en modo demo sin confirmar el
+        final). True si quedó todo terminado, confirmación incluida."""
+        if not siges_real.hay_encuesta(page):
+            ui.contar('   🟨 No vi la encuesta: si aparece, completala vos.', 'aviso')
+            return False
+        try:
+            falta, respuestas = siges_real.completar_encuesta(page, ajustes['config'], respirar,
+                                                              confirmar=not ajustes.get('demo'))
+        except Cancelado:
+            raise
+        except Exception as e:                          # noqa: BLE001
+            falta, respuestas = [f'Encuesta: {type(e).__name__}: {e}'], []
+        registro['encuesta'] = ' | '.join(respuestas)
+        ui.contar(f'   📝 Encuesta: {"; ".join(respuestas)}.', 'info')
+        for f in falta:
+            ui.contar(f'   🟨 Queda para vos: {f}', 'aviso')
+        if falta:
+            registro['pendientes'] = ' | '.join(filter(None, [registro['pendientes'], *falta]))
+            return False
+        if ajustes.get('demo'):
+            ui.contar('   ✅ Toqué "Finalizar inscripción": la confirmación queda para vos.', 'ok')
+            return False
+        ui.contar('   ✅ Inscripción finalizada.', 'ok')
+        return True
+
     for k, (fila, datos) in enumerate(personas):
         if cancelado():
             raise Cancelado
@@ -308,19 +334,28 @@ def cargar_todas(personas, ajustes, ui, page, esperar, respirar, cancelado, lent
         ui.progreso(k, len(personas), quien)
         ui.contar(f'— fila {fila}: {quien} (DNI {datos["dni"]})', 'info')
         registro = {'fila': fila, 'dni': datos['dni'], 'persona': quien,
-                    'resultado': '', 'pendientes': '', 'valores_fijos': '', 'demo_bien': ''}
+                    'resultado': '', 'pendientes': '', 'valores_fijos': '', 'encuesta': '', 'demo_bien': ''}
+        en_el_centro = None      # si ya estaba inscripta en otro curso: lo que difiere con la planilla
         try:
             if ajustes.get('simulador'):
                 import bot
                 ok, detalle = bot.cargar_una(page, datos, lento)
                 pendientes, fijos = ([] if ok else [detalle]), []
             else:
-                ok, motivo = siges_real.buscar_dni(page, datos['dni'])
-                if not ok:
+                que, motivo = siges_real.buscar_dni(page, datos['dni'])
+                if que is None:
                     ui.contar(f'   No pude abrir su formulario: {motivo}', 'aviso')
-                    page = esperar(f'Buscá vos el DNI {datos["dni"]} y abrí "Agregar estudiante".',
+                    page = esperar(f'Buscá vos el DNI {datos["dni"]} y tocá "Buscar estudiante".',
                                    'Listo, seguir')
-                ok, pendientes, fijos = siges_real.completar(page, datos, respirar, ajustes['config'], trabado)
+                    que = siges_real.que_mostro(page)
+                if que == siges_real.YA_EN_EL_CENTRO:
+                    en_el_centro = siges_real.comparar_con_el_centro(page, datos)
+                    ok, pendientes, fijos = siges_real.usar_datos_actuales(page), [], []
+                elif que is None:
+                    ok, pendientes, fijos = False, ['no veo ni el formulario "Agregar estudiante" ni el '
+                                                    'cartel de RENAPER'], []
+                else:
+                    ok, pendientes, fijos = siges_real.completar(page, datos, respirar, ajustes['config'], trabado)
         except Cancelado:
             registro['resultado'] = 'cancelado a mitad'
             resultados.append(registro)
@@ -328,7 +363,22 @@ def cargar_todas(personas, ajustes, ui, page, esperar, respirar, cancelado, lent
         except Exception as e:                          # noqa: BLE001
             ok, pendientes, fijos = False, [f'{type(e).__name__}: {e}'], []
 
-        if ok:
+        if en_el_centro is not None:
+            # No hay formulario que completar: el SiGeS pregunta qué datos usar (se
+            # usan siempre los que ya tiene el centro) y va directo a la encuesta.
+            ui.contar('   ℹ️ Ya está inscripta en otro curso del centro: no hay formulario.', 'aviso')
+            for d in en_el_centro:
+                ui.contar(f'   ⚠️ Quedan los del centro. {d}', 'aviso')
+            if ok:
+                ui.contar('   ✅ Elegí "Datos del estudiante actual".', 'ok')
+                pendientes = []
+            else:
+                ui.contar('   ⛔ Toqué "Datos del estudiante actual" pero no apareció la encuesta: '
+                          'elegilo vos en el SiGeS.', 'mal')
+                pendientes = ['elegir "Datos del estudiante actual"']
+            registro['resultado'] = 'ya estaba en el centro'
+            pendientes += [f'difiere {d}' for d in en_el_centro]
+        elif ok:
             ui.contar('   ✅ Completado.', 'ok')
             for f in fijos:
                 ui.contar(f'   🟦 Con valor fijo: {f}', 'aviso')
@@ -344,9 +394,22 @@ def cargar_todas(personas, ajustes, ui, page, esperar, respirar, cancelado, lent
         resultados.append(registro)
 
         if not ajustes.get('simulador'):
-            page = esperar('Revisá el formulario, completá lo marcado en amarillo, apretá "Guardar '
-                           'estudiante" y hacé la encuesta. Cuando vuelvas al listado del trayecto, '
-                           'tocá el botón.', 'Siguiente')
+            if en_el_centro is None and not ok:
+                # Ya estaba cargada, o algo no estaba donde se esperaba: lo resuelve la preceptora.
+                page = esperar('Resolvé lo marcado con ⛔ en el SiGeS. Cuando vuelvas al listado del '
+                               'trayecto, tocá el botón.', 'Siguiente')
+            else:
+                if en_el_centro is None:
+                    # El formulario lo guarda siempre la preceptora; la encuesta aparece después.
+                    page = esperar('Revisá el formulario, completá lo marcado en amarillo y apretá "Guardar '
+                                   'estudiante". Cuando aparezca la encuesta, tocá el botón: la completo yo.',
+                                   'Ya guardé, seguir')
+                if not encuesta(page, registro) or not siges_real.en_el_listado(page):
+                    page = esperar('Revisá la encuesta y confirmá "Finalizar inscripción" ("Si" y después '
+                                   '"Entendido"). Cuando vuelvas al listado del trayecto, tocá el botón.'
+                                   if ajustes.get('demo') else
+                                   'Completá lo que falte y volvé al listado del trayecto. Cuando lo veas, '
+                                   'tocá el botón.', 'Siguiente')
             # Que "Siguiente" no deje seguir con el formulario todavía abierto.
             while not siges_real.en_el_listado(page):
                 if esperando(page.context, ui.preguntar,
@@ -355,7 +418,7 @@ def cargar_todas(personas, ajustes, ui, page, esperar, respirar, cancelado, lent
                              f'No: te espero a que guardes y vuelvas al listado.', cancelado=cancelado):
                     ui.contar('   ⚠️ Pasé a la próxima sin ver el listado: revisá si quedó guardado.', 'aviso')
                     break
-                page = esperar('Guardá (o cancelá en el SiGeS) y volvé al listado del trayecto. '
+                page = esperar('Terminá (o cancelá en el SiGeS) y volvé al listado del trayecto. '
                                'Cuando lo veas, tocá el botón.', 'Siguiente')
         if ajustes.get('demo'):
             bien = esperando(page.context, ui.preguntar, f'¿Los datos de {quien} quedaron cargados correctamente?',
@@ -369,7 +432,7 @@ def guardar_resumen(resultados):
     """Un CSV por corrida, al lado del programa. Tiene DNI y nombres: no se sube a ningún lado."""
     RESULTADOS.mkdir(exist_ok=True)
     archivo = RESULTADOS / f'carga-{datetime.now():%Y-%m-%d_%H-%M}.csv'
-    columnas = ['fila', 'dni', 'persona', 'resultado', 'pendientes', 'valores_fijos', 'demo_bien']
+    columnas = ['fila', 'dni', 'persona', 'resultado', 'pendientes', 'valores_fijos', 'encuesta', 'demo_bien']
     with open(archivo, 'w', encoding='utf-8-sig', newline='') as f:
         escritor = csv.DictWriter(f, fieldnames=columnas)
         escritor.writeheader()

@@ -29,12 +29,22 @@ aplicación se activa **"Completar con valores fijos"** (provisorio, hasta que
 esas preguntas estén en el formulario), se cargan los valores que la persona
 eligió en la pantalla de Opciones: nunca valores que el bot decida solo.
 
+La encuesta del final (decisión del 21/10)
+------------------------------------------
+La completa el bot: la razón de inscripción y cómo se enteró, al azar entre las
+opciones; las cuatro preguntas Si/No en No; nivel de contenidos y experiencia en
+"Muy bueno"; y una palabra al azar de la lista de Opciones. Después toca
+"Finalizar inscripción". En modo demo la confirmación ("Si" y "Entendido") la
+hace la preceptora; si no, también el bot.
+
 Lo que este módulo NO hace nunca
 --------------------------------
 Iniciar sesión · tocar salud, discapacidad, restricción judicial, redes o
-programas sociales · pisar los datos de alguien ya cargado · guardar · contestar
-la encuesta del final · "Generar matrícula inicial".
+programas sociales · pisar los datos de alguien ya cargado · guardar el
+formulario "Agregar estudiante" · "Generar matrícula inicial".
 """
+import random
+import re
 import unicodedata
 
 # El tiempo que se le da a cada pantalla para aparecer. Es un sistema del
@@ -61,12 +71,22 @@ CONFIG_INICIAL = {
     'educacion_nivel': 'Secundario',
     'educacion_completo': True,
     'educacion_cursando': False,
+    # Para "Si tuviera que definir en una palabra lo que espera de este curso": una al azar.
+    'encuesta_palabras': ['Muy bueno', 'Excelente', 'Hermoso', 'Interesante', 'Útil', 'Enriquecedor',
+                          'Motivador', 'Productivo', 'Genial', 'Fantástico'],
 }
 
 # Las opciones de cada cosa, tal como están en el formulario.
 ZONAS = ['zona urbana', 'zona rural', 'contexto de encierro']
 TRANSPORTES = ['A pie /Bicicleta', 'Colectivo', 'Tren', 'Vehículo particular', 'Taxi/Remis', 'Otro']
 NIVELES = ['Primario', 'Secundario', 'Terciario', 'Universitario']
+# "¿De qué manera accedió a la información…?": al azar entre estas ("Otros" no,
+# que puede pedir aclarar cuál).
+COMO_SE_ENTERO = ['Recomendacion de amigo-familiar', 'Cercanía a la institución', 'Publicidad en redes']
+# Las preguntas Si/No de la encuesta: todas en No. "curso_de_interes" y
+# "otro_curso" quedan así hasta que salgan del formulario de inscripción.
+ENCUESTA_NO = ['vinculado_a_trabajo', 'consideracion_de_logro', 'curso_de_interes', 'otro_curso']
+ENCUESTA_OPINION = 'Muy bueno'
 
 # Campo de texto (por formcontrolname) → clave de los datos de la planilla.
 CAMPOS_DE_TEXTO = [
@@ -184,6 +204,23 @@ def _buscador(page, rotulo, texto):
     return False, f'"{texto}" no apareció en la lista de {rotulo}'
 
 
+def _menu_al_azar(page, abridor):
+    """Abre un menú y elige una de sus opciones al azar. Devuelve su texto, o None."""
+    abridor.click()
+    opciones = page.get_by_role('option')
+    if not _aparece(opciones.first, 5_000):
+        page.keyboard.press('Escape')
+        return None
+    textos = [opciones.nth(i).inner_text().strip() for i in range(opciones.count())]
+    validas = [i for i, t in enumerate(textos) if t]
+    if not validas:
+        page.keyboard.press('Escape')
+        return None
+    i = random.choice(validas)
+    opciones.nth(i).click()
+    return textos[i]
+
+
 def _resaltar(page, texto):
     """Recuadro amarillo alrededor de lo que falta: solo visual, en esta pantalla."""
     page.evaluate(
@@ -207,25 +244,78 @@ def _agregar(page, campo_del_subform):
 
 # ─────────────────────────── Los pasos ───────────────────────────────────
 
+FORMULARIO, YA_EN_EL_CENTRO = 'formulario', 'ya en el centro'
+
+
+def _carteles_renaper(page):
+    """Las dos opciones del cartel "Actualizar datos por RENAPER": (actual, renaper)."""
+    tarjeta = 'button:has(h3:text-is("Datos del estudiante {}"))'
+    return page.locator(tarjeta.format('actual')), page.locator(tarjeta.format('por RENAPER'))
+
+
 def buscar_dni(page, dni):
-    """Del listado del trayecto al formulario "Agregar estudiante". Devuelve (ok, detalle)."""
+    """Del listado del trayecto a lo que muestre el SiGeS para ese DNI.
+
+    Devuelve (resultado, detalle). `resultado` es FORMULARIO (se abrió "Agregar
+    estudiante"), YA_EN_EL_CENTRO (la persona ya está inscripta en otro curso del
+    centro: el SiGeS pregunta si usar sus datos actuales o los de RENAPER, y
+    después va directo a la encuesta) o None si no se pudo (el motivo en `detalle`).
+    """
     mas = page.locator('button:has(mat-icon:text-is("add"))')
     if mas.count() != 1:
-        return False, f'esperaba UN botón "+" y hay {mas.count()}: ¿está abierto el listado del trayecto?'
+        return None, f'esperaba UN botón "+" y hay {mas.count()}: ¿está abierto el listado del trayecto?'
     mas.click()
     tipo = page.get_by_label('Tipo de documento', exact=True)
     if not _aparece(tipo):
-        return False, 'no se abrió el buscador de estudiantes al tocar "+"'
+        return None, 'no se abrió el buscador de estudiantes al tocar "+"'
     if sin_acentos(tipo.inner_text()) != 'dni':
         ok, detalle = _menu(page, tipo, 'DNI')
         if not ok:
-            return False, 'Tipo de documento: ' + detalle
+            return None, 'Tipo de documento: ' + detalle
     page.locator('input[name="numero_de_documento"]').fill(str(dni))
     _boton(page, 'Buscar estudiante', exacto=False).click()
-    if not _aparece(_campo(page, 'apellido')):
-        return False, ('no se abrió el formulario "Agregar estudiante": '
-                       'fijate qué mostró el sistema (¿ya está inscripto? ¿DNI inválido?)')
-    return True, ''
+    actual, _ = _carteles_renaper(page)
+    if not _aparece(_campo(page, 'apellido').or_(actual)):
+        return None, ('no se abrió el formulario "Agregar estudiante": '
+                      'fijate qué mostró el sistema (¿ya está inscripto? ¿DNI inválido?)')
+    return que_mostro(page), ''
+
+
+def que_mostro(page):
+    """Después de "Buscar estudiante": FORMULARIO, YA_EN_EL_CENTRO o None."""
+    if _visible(_carteles_renaper(page)[0]):
+        return YA_EN_EL_CENTRO
+    if _visible(_campo(page, 'apellido')):
+        return FORMULARIO
+    return None
+
+
+def comparar_con_el_centro(page, datos):
+    """Con el cartel de RENAPER abierto: lo que difiere entre los datos que el centro
+    ya tiene de la persona y la planilla (solo para avisar: se usan los del centro)."""
+    actual, _ = _carteles_renaper(page)
+    en_el_centro = {}
+    for linea in actual.inner_text().splitlines():
+        rotulo, _, valor = linea.partition(':')
+        if valor.strip():
+            en_el_centro[sin_acentos(rotulo)] = valor.strip()
+    diferencias = []
+    for rotulo, clave in (('Apellido', 'apellidos'), ('Nombres', 'nombres'),
+                          ('Fecha de nacimiento', 'fecha_nacimiento')):
+        en_siges = en_el_centro.get(sin_acentos(rotulo), '')
+        en_planilla = str(datos.get(clave) or '')
+        if sin_acentos(en_siges) != sin_acentos(en_planilla):
+            diferencias.append(f'{rotulo}: en el centro "{en_siges}", en la planilla "{en_planilla}"')
+    return diferencias
+
+
+def usar_datos_actuales(page):
+    """En el cartel de RENAPER elige "Datos del estudiante actual": en el centro se usan
+    siempre esos, nunca los de RENAPER (que suelen venir incompletos). Devuelve
+    True si se cerró el cartel y apareció la encuesta."""
+    actual, _ = _carteles_renaper(page)
+    actual.click()
+    return _aparece(_boton(page, 'Finalizar inscripción'))
 
 
 def ya_tiene_datos(page, datos):
@@ -333,13 +423,82 @@ def completar(page, datos, respirar=lambda: None, config=None, trabado=None):
     return True, pendientes, fijos
 
 
+def hay_encuesta(page):
+    return _visible(_boton(page, 'Finalizar inscripción'))
+
+
+def completar_encuesta(page, cfg, respirar=lambda: None, confirmar=True):
+    """Completa la encuesta abierta y toca "Finalizar inscripción". Con `confirmar`
+    también contesta "Si" a "¿Desea finalizar…?" y "Entendido" al aviso; sin él
+    (modo demo) eso queda para la preceptora.
+
+    Devuelve (pendientes, respuestas): lo que no se pudo y lo que se contestó.
+    Si falta algo, no toca "Finalizar inscripción".
+    """
+    cfg = {**CONFIG_INICIAL, **(cfg or {})}
+    falta, respuestas = [], []
+    # Los tres menús se llaman igual ("razon"): van en este orden.
+    menus = page.locator('mat-select[name="razon"]')
+    if menus.count() != 3:
+        return [f'Encuesta: esperaba 3 menús y hay {menus.count()}'], []
+
+    razon = _menu_al_azar(page, menus.nth(0))
+    if razon:
+        respuestas.append(f'razón: {razon}')
+    else:
+        falta.append('Encuesta: la razón de inscripción (el menú no mostró opciones)')
+    respirar()
+    for i, rotulo in ((1, 'nivel de contenidos'), (2, 'experiencia')):
+        ok, detalle = _menu(page, menus.nth(i), ENCUESTA_OPINION)
+        if not ok:
+            falta.append(f'Encuesta: {rotulo} ({detalle})')
+        respirar()
+    for grupo in ENCUESTA_NO:
+        ok, detalle = _radio(page, grupo, 'false')
+        if not ok:
+            falta.append(f'Encuesta: {detalle}')
+        respirar()
+
+    palabra = random.choice([p for p in cfg['encuesta_palabras'] if str(p).strip()] or [ENCUESTA_OPINION])
+    _campo(page, 'definicion_por_palabra').fill(str(palabra).strip())
+    respuestas.append(f'palabra: {palabra}')
+    respirar()
+
+    como = random.choice(COMO_SE_ENTERO)
+    boton = page.locator(f'mat-radio-button:has(input[type="radio"][value="{como}"])')
+    if boton.count() == 1:
+        boton.locator('label').first.click()
+        respuestas.append(f'se enteró por: {como}')
+    else:
+        falta.append(f'Encuesta: cómo se enteró (no encontré "{como}")')
+    respirar()
+
+    if falta:
+        _resaltar(page, 'Finalizar inscripción')
+        return falta, respuestas
+    _boton(page, 'Finalizar inscripción').click()
+    if not confirmar:
+        return [], respuestas
+    si = page.get_by_role('button', name=re.compile(r'^\s*s[ií]\s*$', re.IGNORECASE))
+    if not _aparece(si):
+        return ['Encuesta: no apareció "¿Desea finalizar la inscripción?": confirmala vos'], respuestas
+    si.first.click()
+    entendido = _boton(page, 'Entendido')
+    if not _aparece(entendido):
+        return ['Encuesta: no apareció "Inscripción finalizada correctamente"'], respuestas
+    entendido.click()
+    return [], respuestas
+
+
 def _visible(loc):
     return loc.count() > 0 and loc.first.is_visible()
 
 
 def en_el_listado(page):
-    """¿Volvió la persona al listado del trayecto? (el formulario cerrado y el "+" a la vista)"""
-    return not _visible(_campo(page, 'apellido')) and _visible(page.locator('button:has(mat-icon:text-is("add"))'))
+    """¿Volvió la persona al listado del trayecto? (el formulario y los carteles, como el
+    de RENAPER o la encuesta, cerrados, y el "+" a la vista)"""
+    return (not _visible(_campo(page, 'apellido')) and not _visible(page.locator('mat-dialog-container'))
+            and _visible(page.locator('button:has(mat-icon:text-is("add"))')))
 
 
 # Cada sub-formulario devuelve (pendientes, cargado_con_fijos, quedo_abierto).

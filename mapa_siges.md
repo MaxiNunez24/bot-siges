@@ -123,8 +123,10 @@ difieren de la planilla, y completa la encuesta.
 - **Campos de texto, por `formcontrolname` o `name`**: los pusieron los programadores del sistema,
   no cambian solos (los `id` sí).
 - **Opciones, por el nombre del grupo y su `value`**: `sexo` = `femenino` / `masculino` / `x`,
-  `tipo_de_carga` = `comun`, `estado_del_documento` = `DNI_fisico`. **Nunca por el texto**: hay
-  nueve pares "Si / No" en el formulario, y "Si" encuentra varios.
+  `tipo_de_carga` = `comun`, `estado_del_documento` = `DNI_fisico`, `esta_trabajando` = `false`
+  (viene en "Si", y con "Si" exige completar la trayectoria laboral: se marca siempre "No",
+  decisión del 21/10). **Nunca por el texto**: hay nueve pares "Si / No" en el formulario, y "Si"
+  encuentra varios.
 - Con un diálogo abierto, **el fondo queda `aria-hidden`**: `get_by_role` no ve lo de atrás.
 
 ### Lo que no se puede saber sin el sistema vivo

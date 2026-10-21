@@ -100,6 +100,8 @@ CAMPOS_DE_TEXTO = [
 RADIOS_FIJOS = [
     ('tipo_de_carga', 'comun', 'Carga común'),
     ('estado_del_documento', 'DNI_fisico', 'DNI Físico'),
+    # Viene marcado en "Si", y con "Si" el SiGeS exige completar la trayectoria laboral.
+    ('esta_trabajando', 'false', '¿Está trabajando? No'),
 ]
 
 SEXO = {'femenino': 'femenino', 'masculino': 'masculino', 'x': 'x'}

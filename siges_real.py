@@ -181,6 +181,13 @@ def _boton(page, texto, exacto=True):
     return page.get_by_role('button', name=texto, exact=exacto)
 
 
+def _sin_opciones(page, ms=5_000):
+    """Espera a que se termine de cerrar la lista de un menú. Material la cierra con
+    una animación: si se abre el menú siguiente antes, sus opciones se mezclan con
+    las que se están yendo, y esperar a cada una de esas colgaba al bot."""
+    _desaparece(page.get_by_role('option').first, ms)
+
+
 def _elegir_opcion(page, texto):
     """En un menú o lista ya abierta, elige la opción con ese texto (sin importar
     tildes ni mayúsculas). Nunca elige una "parecida"."""
@@ -188,15 +195,17 @@ def _elegir_opcion(page, texto):
     if not _aparece(opciones.first, 5_000):
         return False
     buscado = sin_acentos(texto)
-    for i in range(opciones.count()):
-        op = opciones.nth(i)
-        if sin_acentos(op.inner_text()) == buscado:
-            op.click()
+    # Todos los textos de una vez: leerlos de a uno espera a cada opción, aunque ya no esté.
+    for i, t in enumerate(opciones.all_inner_texts()):
+        if sin_acentos(t) == buscado:
+            opciones.nth(i).click()
+            _sin_opciones(page)
             return True
     return False
 
 
 def _menu(page, abridor, opcion):
+    _sin_opciones(page)
     abridor.click()
     if _elegir_opcion(page, opcion):
         return True, ''
@@ -221,18 +230,20 @@ def _buscador(page, rotulo, texto):
 
 def _menu_al_azar(page, abridor):
     """Abre un menú y elige una de sus opciones al azar. Devuelve su texto, o None."""
+    _sin_opciones(page)
     abridor.click()
     opciones = page.get_by_role('option')
     if not _aparece(opciones.first, 5_000):
         page.keyboard.press('Escape')
         return None
-    textos = [opciones.nth(i).inner_text().strip() for i in range(opciones.count())]
+    textos = [t.strip() for t in opciones.all_inner_texts()]
     validas = [i for i, t in enumerate(textos) if t]
     if not validas:
         page.keyboard.press('Escape')
         return None
     i = random.choice(validas)
     opciones.nth(i).click()
+    _sin_opciones(page)
     return textos[i]
 
 
